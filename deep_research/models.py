@@ -90,6 +90,7 @@ class ResearchBundle:
     final_outline: list[str]
     answer: str
     limitations: list[str] = field(default_factory=list)
+    cautions: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
 
 

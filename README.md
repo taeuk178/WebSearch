@@ -28,6 +28,18 @@ BRAVE_SEARCH_API_KEY=... python -m deep_research.cli "의료 신경과학 공부
 
 You can also set `DEEP_RESEARCH_SEARCH_PROVIDER=brave`.
 
+Use the arXiv API for paper search. arXiv requests are rate-limited to at least 3.5 seconds apart by default:
+
+```bash
+python -m deep_research.cli "agentic search 논문 요약" --search-provider arxiv
+```
+
+Override the arXiv interval only when you deliberately need a different local policy:
+
+```bash
+python -m deep_research.cli "agentic search 논문 요약" --search-provider arxiv --arxiv-delay 3.5
+```
+
 Fetch and extract page text instead of using only search snippets:
 
 ```bash
@@ -51,6 +63,7 @@ Then open `http://127.0.0.1:8000`.
 - `deep_research.reader.HttpPageReader`: optional dependency-free HTML/text reader with snippet fallback and basic chunking.
 - `deep_research.writer.AnswerWriter`: replaceable answer composition interface.
 - `deep_research.writer.EvidenceAnswerWriter`: deterministic evidence-aware writer that preserves source IDs.
+- `deep_research.policy`: execution cautions and rate limiting policy. arXiv API and arXiv page reads use a 3.5-second minimum interval.
 - `deep_research.safety.assess_safety`: routes medical risk levels and source quality requirements.
 - `deep_research.server`: standard-library SSE endpoint (`POST /research`) and minimal UI (`GET /`).
 - `deep_research.search.SearchProvider`: replaceable search interface.

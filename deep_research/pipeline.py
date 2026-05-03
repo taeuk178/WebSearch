@@ -18,6 +18,7 @@ from .models import (
     Stage,
     StageEvent,
 )
+from .policy import execution_cautions
 from .reader import PageReader, SnippetReader
 from .safety import SafetyAssessment, assess_safety
 from .search import MockSearchProvider, SearchProvider
@@ -239,6 +240,11 @@ class DeepResearchPipeline:
         filtered_sources = [source for source in ranked_sources if source.trust >= safety.min_trust]
         if not filtered_sources:
             filtered_sources = ranked_sources
+        includes_arxiv = any("arxiv.org" in source.result.url for source in ranked_sources)
+        cautions = execution_cautions(
+            includes_arxiv=includes_arxiv,
+            high_stakes=safety.risk_level in {"medium", "high"},
+        )
         answer = self.answer_writer.write(question, final_outline, evidence, filtered_sources, limitations)
         bundle = ResearchBundle(
             question=question,
@@ -250,7 +256,12 @@ class DeepResearchPipeline:
             final_outline=final_outline,
             answer=answer,
             limitations=limitations,
-            metadata={"generated_at": datetime.now(UTC).isoformat(), "safety_risk_level": safety.risk_level},
+            cautions=cautions,
+            metadata={
+                "generated_at": datetime.now(UTC).isoformat(),
+                "safety_risk_level": safety.risk_level,
+                "includes_arxiv": includes_arxiv,
+            },
         )
         self._emit(Stage.PREPARING_BUNDLE, "최종 답변, 출처, 근거 맵을 하나의 번들로 묶었습니다.")
         return bundle
@@ -307,6 +318,7 @@ class DeepResearchPipeline:
             "university_course": 0.95,
             "medical_education": 0.88,
             "textbook": 0.82,
+            "preprint": 0.68,
             "education": 0.72,
             "technology": 0.74,
             "business": 0.7,
@@ -349,7 +361,6 @@ class DeepResearchPipeline:
 
     def _find_outline_gaps(self, plan: ResearchPlan, evidence: list[Evidence]) -> list[str]:
         counts: dict[str, int] = defaultdict(int)
-        source_types: dict[str, set[str]] = defaultdict(set)
         for item in evidence:
             counts[item.outline_section] += 1
         gaps: list[str] = []

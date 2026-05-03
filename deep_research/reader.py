@@ -4,10 +4,12 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from dataclasses import dataclass
 from html.parser import HTMLParser
+from urllib.parse import urlparse
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from .models import SearchResult
+from .policy import ARXIV_REQUEST_INTERVAL_SECONDS, RateLimiter
 
 
 @dataclass(frozen=True)
@@ -54,10 +56,19 @@ class HttpPageReader(PageReader):
     real reading path without making the core pipeline depend on a crawler.
     """
 
-    def __init__(self, *, timeout: float = 10.0, max_bytes: int = 500_000, opener=urlopen) -> None:
+    def __init__(
+        self,
+        *,
+        timeout: float = 10.0,
+        max_bytes: int = 500_000,
+        opener=urlopen,
+        arxiv_interval_seconds: float = ARXIV_REQUEST_INTERVAL_SECONDS,
+        arxiv_rate_limiter: RateLimiter | None = None,
+    ) -> None:
         self.timeout = timeout
         self.max_bytes = max_bytes
         self._opener = opener
+        self._arxiv_rate_limiter = arxiv_rate_limiter or RateLimiter(arxiv_interval_seconds)
 
     def read(self, results: Iterable[SearchResult]) -> list[ReadDocument]:
         documents: list[ReadDocument] = []
@@ -68,6 +79,9 @@ class HttpPageReader(PageReader):
     def _read_one(self, result: SearchResult) -> ReadDocument:
         if not result.url.startswith(("http://", "https://")):
             return _fallback_document(result)
+
+        if _is_arxiv_url(result.url):
+            self._arxiv_rate_limiter.wait()
 
         request = Request(
             result.url,
@@ -168,3 +182,8 @@ def _chunk_text(text: str, chunk_size: int = 1200, overlap: int = 120) -> list[s
             break
         start = max(0, end - overlap)
     return [chunk for chunk in chunks if chunk]
+
+
+def _is_arxiv_url(url: str) -> bool:
+    host = urlparse(url).hostname or ""
+    return host == "arxiv.org" or host.endswith(".arxiv.org")

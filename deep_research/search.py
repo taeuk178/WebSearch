@@ -3,11 +3,13 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
 import json
+from xml.etree import ElementTree
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlparse
 from urllib.request import Request, urlopen
 
 from .models import SearchQuery, SearchResult
+from .policy import ARXIV_REQUEST_INTERVAL_SECONDS, RateLimiter
 
 
 class SearchProviderError(RuntimeError):
@@ -146,6 +148,101 @@ class BraveSearchProvider(SearchProvider):
         return source_id
 
 
+class ArxivSearchProvider(SearchProvider):
+    """arXiv API provider with an enforced request interval."""
+
+    DEFAULT_ENDPOINT = "https://export.arxiv.org/api/query"
+
+    def __init__(
+        self,
+        *,
+        endpoint: str = DEFAULT_ENDPOINT,
+        timeout: float = 10.0,
+        request_interval_seconds: float = ARXIV_REQUEST_INTERVAL_SECONDS,
+        opener=urlopen,
+        rate_limiter: RateLimiter | None = None,
+    ) -> None:
+        self.endpoint = endpoint
+        self.timeout = timeout
+        self._opener = opener
+        self._rate_limiter = rate_limiter or RateLimiter(request_interval_seconds)
+        self._next_source_number = 1
+
+    def search(self, queries: Iterable[SearchQuery], limit_per_query: int = 5) -> list[SearchResult]:
+        results: list[SearchResult] = []
+        for query in queries:
+            results.extend(self._search_one(query, limit_per_query))
+        return results
+
+    def _search_one(self, query: SearchQuery, limit_per_query: int) -> list[SearchResult]:
+        params = urlencode(
+            {
+                "search_query": f"all:{query.text}",
+                "start": 0,
+                "max_results": max(1, min(limit_per_query, 25)),
+                "sortBy": "relevance",
+                "sortOrder": "descending",
+            }
+        )
+        request = Request(
+            f"{self.endpoint}?{params}",
+            headers={"User-Agent": "websearch-deep-research/0.1"},
+        )
+
+        self._rate_limiter.wait()
+        try:
+            with self._opener(request, timeout=self.timeout) as response:
+                payload = response.read()
+        except HTTPError as exc:
+            raise SearchProviderError(f"arXiv request failed with HTTP {exc.code}.") from exc
+        except URLError as exc:
+            raise SearchProviderError(f"arXiv request failed: {exc.reason}.") from exc
+
+        return self._parse_feed(payload, query.text, limit_per_query)
+
+    def _parse_feed(self, payload: bytes, query_text: str, limit_per_query: int) -> list[SearchResult]:
+        try:
+            root = ElementTree.fromstring(payload)
+        except ElementTree.ParseError as exc:
+            raise SearchProviderError("arXiv returned invalid Atom XML.") from exc
+
+        namespace = {"atom": "http://www.w3.org/2005/Atom"}
+        results: list[SearchResult] = []
+        for entry in root.findall("atom:entry", namespace)[:limit_per_query]:
+            title = _clean_text(entry.findtext("atom:title", default="", namespaces=namespace))
+            summary = _clean_text(entry.findtext("atom:summary", default="", namespaces=namespace))
+            published_at = _clean_text(entry.findtext("atom:published", default="", namespaces=namespace)) or None
+            url = _entry_url(entry, namespace)
+            if not title or not url:
+                continue
+            results.append(
+                SearchResult(
+                    source_id=self._next_source_id(),
+                    title=title,
+                    url=url,
+                    snippet=summary or title,
+                    source_type="preprint",
+                    published_at=published_at,
+                    query=query_text,
+                )
+            )
+        return results
+
+    def _next_source_id(self) -> str:
+        source_id = f"S{self._next_source_number}"
+        self._next_source_number += 1
+        return source_id
+
+
+def _entry_url(entry: ElementTree.Element, namespace: dict[str, str]) -> str:
+    for link in entry.findall("atom:link", namespace):
+        if link.attrib.get("rel") in {None, "alternate"}:
+            href = _clean_text(link.attrib.get("href"))
+            if href:
+                return href
+    return _clean_text(entry.findtext("atom:id", default="", namespaces=namespace))
+
+
 def _clean_text(value: object) -> str:
     if not isinstance(value, str):
         return ""
@@ -169,6 +266,8 @@ def _infer_source_type(url: str, title: str, snippet: str) -> str:
         return "government_health"
     if any(term in haystack for term in ["textbook", "book", "principles of neural science"]):
         return "textbook"
+    if "arxiv.org" in host:
+        return "preprint"
     if any(term in haystack for term in ["medical", "clinical", "neurology", "neuroscience"]):
         return "medical_education"
     return "web"

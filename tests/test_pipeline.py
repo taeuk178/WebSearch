@@ -43,6 +43,14 @@ class DeepResearchPipelineTest(unittest.TestCase):
 
         self.assertEqual(len(urls), len(set(urls)))
 
+    def test_bundle_includes_execution_cautions(self):
+        pipeline = DeepResearchPipeline()
+
+        bundle = pipeline.run("의료 신경과학 공부하는 방법")
+
+        self.assertTrue(bundle.cautions)
+        self.assertTrue(any("rate limit" in caution for caution in bundle.cautions))
+
 
 if __name__ == "__main__":
     unittest.main()

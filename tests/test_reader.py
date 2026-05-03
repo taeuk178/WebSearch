@@ -1,6 +1,7 @@
 import unittest
 
 from deep_research.models import SearchResult
+from deep_research.policy import RateLimiter
 from deep_research.reader import HttpPageReader, SnippetReader
 
 
@@ -59,6 +60,36 @@ class ReaderTest(unittest.TestCase):
 
         self.assertEqual(document.text, "Snippet fallback")
         self.assertFalse(document.from_page)
+
+    def test_http_page_reader_rate_limits_arxiv_pages(self):
+        now = [0.0]
+        sleeps = []
+
+        def clock():
+            return now[0]
+
+        def sleeper(seconds):
+            sleeps.append(seconds)
+            now[0] += seconds
+
+        def opener(request, timeout):
+            return FakeResponse(b"<html><body><p>arXiv paper text</p></body></html>")
+
+        reader = HttpPageReader(
+            opener=opener,
+            arxiv_rate_limiter=RateLimiter(3.5, clock=clock, sleeper=sleeper),
+        )
+
+        documents = reader.read(
+            [
+                make_result("https://arxiv.org/abs/2501.00001"),
+                make_result("https://arxiv.org/abs/2501.00002"),
+            ]
+        )
+
+        self.assertEqual(len(documents), 2)
+        self.assertTrue(all(document.from_page for document in documents))
+        self.assertEqual(sleeps, [3.5])
 
 
 if __name__ == "__main__":
