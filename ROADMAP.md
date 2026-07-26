@@ -15,10 +15,16 @@
 - `scripts/status.sh` 상태 점검, `server|webui/requirements.lock` 버전 잠금
 - 문서: `docs/install.md`, `docs/security.md`, `docs/usage.md`, `docs/troubleshooting.md`
 
-사용자 수동 작업 필요(스크립트/문서는 준비됨):
-- `scripts/connect-gemma` — Tailscale/SSH 터널 (MacBook에서 실행, `docs/usage.md`)
-- Tailscale 로그인·ACL, macOS 원격 로그인·SSH 하드닝·공개키 등록 (`docs/security.md`)
-- 재부팅 후 물리 로그인 자동복구, 다른 네트워크 접속 등 실기기 검증 (아래 체크리스트)
+실기기 접속 검증 완료(2026-07-26):
+- ✅ Mac mini Tailscale(`taeukkim-macmini`, Google `dnwndlsdlsi@gmail.com`) + 원격 로그인 ON
+- ✅ MacBook Air(`taeuk-macbookair`)를 **같은 Google 계정**으로 재로그인 → 같은 tailnet
+- ✅ 키(공개키) 등록 후 SSH 접속 + `ssh -L` 로컬 포트 포워딩으로 `http://127.0.0.1:3001` → gemma4 접속 성공
+- (겪은 함정은 `docs/troubleshooting.md`에 반영: 제공자 불일치, 클라이언트 개인키 부재, 로컬 3000 점유, `-N` 멈춤=정상)
+
+남은 수동 작업:
+- SSH **하드닝 미적용**(현재 비밀번호 인증 ON). `config/sshd_config.d/gemma.conf` 준비됨 →
+  모든 기기 키 로그인 확인 후 적용 (`docs/security.md` 3-3).
+- Tailscale ACL 문서화 적용(선택), 재부팅 후 자동복구 실기기 검증(아래 체크리스트).
 
 ---
 
@@ -239,12 +245,14 @@ mlx-lm 0.31.3 / mlx 0.32.0 / open-webui 0.10.2 / Python 3.12·3.11 기록,
 - [x] 웹 검색 시 서로 다른 출처 5개 + 클릭 가능한 인용 표시
 - [x] 일반 대화 시 웹 요청 0, 추가 LLM 호출 없음(대화 1회=MLX 1회)
 - [x] 검색 결과 임베딩/벡터 미저장(chroma 컬렉션 없음)
+- [x] MacBook Air에서 Tailscale+SSH 터널로 `http://127.0.0.1:3001` → gemma4 접속 성공
+- [x] SSH 공개키 로그인 동작(키 등록 후 비밀번호 없이 로그인)
 - [ ] 재부팅 → 1회 물리 로그인 → 두 서비스 자동 복구 → 새 터널로 재접속
-- [ ] 다른 네트워크(핫스팟)에서 Tailscale+connect-gemma 터널 성공
-- [ ] 터널 종료 시 `http://127.0.0.1:3000` 즉시 실패
+- [ ] 다른 네트워크(핫스팟)에서 접속 (집 네트워크 외 검증)
+- [ ] 터널 종료 시 `http://127.0.0.1:<LOCAL_PORT>` 즉시 실패
 - [ ] SSH 터널 없이 LAN/Tailscale/공인으로 3000·8080 직접 접근 불가
 - [ ] MacBook Tailscale OFF 시 터널 생성 불가
-- [ ] 비밀번호 SSH 거부, 등록 키 사용자만 접속
+- [ ] **비밀번호 SSH 거부, 등록 키 사용자만 접속 (하드닝 미적용 — 현재 비번 로그인 가능)**
 - [ ] 웹 검색 10회 연속 시 모델 서버 OOM 종료 없음
 - [ ] 임시 대화 종료 후 기록 잔류 없음(설정은 강제됨, 실사용 확인)
 - [ ] 로그/네트워크 점검으로 프롬프트가 외부 LLM API로 전송되지 않음 확인

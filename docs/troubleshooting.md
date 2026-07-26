@@ -35,12 +35,30 @@
   사용자에게 실패를 알리며 서비스는 죽지 않는다. 필요 시 `WEB_SEARCH_ENGINE`을
   SearXNG/Brave/Tavily로 교체(관련 키 설정).
 
-## SSH 터널 실패 (connect-gemma)
+## SSH/터널 실패 (실제로 자주 겪는 순서대로)
 
-- `오류: Tailscale이 연결되어 있지 않습니다` → MacBook Tailscale 켜기.
-- `로컬 포트 3000 사용 중` → `LOCAL_PORT` 변경 또는 기존 프로세스 종료.
-- 인증 거부 → 공개키가 Mac mini `~/.ssh/authorized_keys`에 등록됐는지, `AllowUsers` 확인.
-- Mac mini가 잠자기? 에너지 설정에서 자동 잠자기 해제 권장.
+**`tailscale status`에 taeukkim-macmini 가 안 보임 / hostname 못 찾음**
+- 두 기기의 Tailscale **로그인 제공자가 다름**(가장 흔함). 한쪽 Google, 한쪽 "Sign in with Apple"
+  이면 Apple ID가 같아도 다른 tailnet이다. MacBook을 **같은 Google 계정
+  (`dnwndlsdlsi@gmail.com`)** 으로 재로그인. → `security.md` 2장.
+
+**`ssh` 가 계속 `password:` 를 물음 (키 인증 실패)**
+- MacBook에 **매칭되는 개인키가 없는 것**이 대부분. 확인:
+  `ssh -v taeuk@taeukkim-macmini 2>&1 | grep 'type -1'` 에 `id_ed25519/id_rsa type -1`이 뜨면 키 없음.
+- 해결(MacBook에서): `ssh-keygen -t ed25519` → `ssh-copy-id taeuk@taeukkim-macmini` → 다시 `ssh`.
+- 공개키만 서버에 넣고 개인키가 클라이언트에 없으면 소용없다(공개키·개인키는 한 쌍).
+
+**터널을 열었는데 브라우저가 안 열림**
+- `-N` 터널은 접속 후 **커서만 멈춘 게 정상**이다. 비번(또는 키)로 인증만 끝나면 작동 중.
+  멈춘 걸 보고 **Ctrl-C 하면 안 된다**(터널 종료됨).
+- MacBook **로컬 포트 3000이 이미 점유**면 포워딩이 조용히 실패한다 → `LOCAL_PORT`를 3001로.
+  확인: `ssh -v -N -L 3001:127.0.0.1:3000 ...` 로그에 `Local forwarding listening on ... port 3001` 이 떠야 정상.
+- 브라우저 주소가 **`http://`** 인지 확인(❌ `https`). Safari 문제면 `http://localhost:3001` 또는 Chrome.
+
+**`오류: Tailscale이 연결되어 있지 않습니다`** → MacBook Tailscale 켜기.
+
+**Mac mini가 응답 없음** → 잠자기 들어갔을 수 있음. 잠자기 해제 또는 `caffeinate -s`.
+재부팅 후면 Mac mini에서 한 번 물리 로그인(FileVault) 필요.
 
 ## 메모리 부족(OOM) / 서비스 재시작 반복
 

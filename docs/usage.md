@@ -1,24 +1,45 @@
 # 사용법 (MacBook에서 접속)
 
+> 전제(최초 1회): MacBook이 Mac mini와 **같은 Google 계정**으로 Tailscale 로그인 +
+> **키(비밀번호 없이) SSH 로그인**이 되는 상태. (설정: [security.md](security.md) 2·3장)
+> 확인: `ssh taeuk@taeukkim-macmini` 가 비번 없이 로그인되면 준비 완료.
+
 ## 1. 최초 1회: connect-gemma 설정 (MacBook)
 
 ```bash
 # 저장소의 scripts/connect-gemma, connect-gemma.env.example 를 MacBook으로 복사
 cp scripts/connect-gemma.env.example scripts/connect-gemma.env
-# connect-gemma.env 편집: GEMMA_SSH_HOST(=Mac mini Tailscale 호스트명), GEMMA_SSH_USER
 # (선택) 어디서나 쓰도록: ln -s "$PWD/scripts/connect-gemma" /usr/local/bin/connect-gemma
+```
+`connect-gemma.env` 내용(이 서버 기준):
+```
+GEMMA_SSH_HOST=taeukkim-macmini
+GEMMA_SSH_USER=taeuk
+LOCAL_PORT=3001      # MacBook 로컬 포트 (3000이 이미 쓰이면 3001 등으로)
+REMOTE_PORT=3000     # Mac mini Open WebUI 포트
 ```
 
 ## 2. 접속
 
 ```bash
-connect-gemma           # SSH 터널만 연다 (Ctrl-C 로 종료)
-connect-gemma --open    # 터널 후 기본 브라우저로 http://127.0.0.1:3000 열기
+connect-gemma --open    # 터널 열고 기본 브라우저로 http://127.0.0.1:3001 자동 열기
+connect-gemma           # 터널만 (직접 브라우저에서 http://127.0.0.1:3001)
+```
+스크립트 없이 raw 명령으로도 가능:
+```bash
+ssh -N -L 3001:127.0.0.1:3000 taeuk@taeukkim-macmini   # 이 창은 켜둔 채로
 ```
 
-- 터널이 열려 있는 동안 MacBook 브라우저에서 `http://127.0.0.1:3000` 사용.
-- 연결이 끊기면 자동 재시도, `Ctrl-C`로 종료하면 터널과 로컬 접근이 함께 닫힌다.
-- 전제: Mac mini 전원 ON + 사용자 로그인 + 인터넷 + Tailscale + SSH 정상.
+- ⚠️ `-N` 터널은 접속 후 **아무 메시지 없이 커서만 멈춘 게 정상**이다(작동 중).
+  멈춘 걸 보고 Ctrl-C 하면 터널이 닫힌다. **끝날 때까지 창을 켜둔다.**
+- 터널이 열려 있는 동안 MacBook 브라우저에서 `http://127.0.0.1:3001` 사용.
+  (❌ `https://` 아님. Safari가 말썽이면 `http://localhost:3001` 또는 Chrome)
+- `Ctrl-C`로 종료하면 터널과 로컬 접근이 함께 닫힌다. `connect-gemma`는 끊기면 자동 재접속.
+- 전제: Mac mini 전원 ON(+잠자기 꺼짐) + 사용자 로그인 + 인터넷 + Tailscale + SSH 정상.
+
+> Mac mini가 **잠자기**에 들면 접속이 끊긴다. 상시 서버로 쓰려면 시스템 설정에서
+> 잠자기를 끄거나(권장) 임시로 `caffeinate -s` 를 실행해 둔다.
+> 재부팅했다면 Mac mini에서 **한 번 물리 로그인**하면 서비스가 자동 복구된다.
 
 ## 3. 웹 검색 (필요할 때 토글)
 
