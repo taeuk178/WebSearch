@@ -52,35 +52,5 @@ except urllib.error.HTTPError:
     call("/api/v1/models/model/update?id="+urllib.parse.quote(base_model, safe=""))
     print(f"갱신: {name} (id={base_model})")
 print("function_calling=legacy, 한국어 기본 시스템 프롬프트 적용됨")
-
-# 웹 검색 "항상 켜기"(사용자 설정 ui.webSearch="always"). UI 토글 표시용.
-req=urllib.request.Request(base+"/api/v1/users/user/settings/update",
-    data=json.dumps({"ui":{"webSearch":"always"}}).encode(), headers=H)
-urllib.request.urlopen(req).read()
-print("웹 검색 항상 켜기(always) 설정됨")
-
-# 전역 Filter 'force_web_search': UI 토글과 무관하게 매 요청에 웹 검색을 서버에서 강제.
-import os, time
-fn_path = os.path.join(os.path.dirname(os.path.abspath(__file__)) if '__file__' in dir() else '.', 'functions', 'force_web_search.py')
-try:
-    fn_content = open(fn_path, encoding='utf-8').read()
-except Exception:
-    fn_content = None
-if fn_content:
-    now=int(time.time())
-    body=json.dumps({"id":"force_web_search","name":"Force Web Search","type":"filter",
-        "content":fn_content,"meta":{"description":"모든 요청에 웹 검색 강제","manifest":{}},
-        "is_active":True,"is_global":True,"updated_at":now,"created_at":now}).encode()
-    try:
-        urllib.request.urlopen(urllib.request.Request(base+"/api/v1/functions/create", data=body, headers=H)).read()
-    except urllib.error.HTTPError:
-        urllib.request.urlopen(urllib.request.Request(base+"/api/v1/functions/id/force_web_search/update", data=body, headers=H)).read()
-    # 활성 + 전역 보장 (현재 상태가 꺼져 있으면 토글)
-    def toggle(p):
-        try: return json.loads(urllib.request.urlopen(urllib.request.Request(base+p, data=b"{}", headers=H)).read())
-        except Exception: return {}
-    cur=json.loads(urllib.request.urlopen(urllib.request.Request(base+"/api/v1/functions/id/force_web_search", headers=H)).read())
-    if not cur.get("is_active"):  toggle("/api/v1/functions/id/force_web_search/toggle")
-    if not cur.get("is_global"): toggle("/api/v1/functions/id/force_web_search/toggle/global")
-    print("전역 필터 force_web_search 활성화됨 (토글 무관 강제 검색)")
+# 웹 검색은 강제하지 않는다. 필요할 때 입력창 웹 검색 토글로 켠다(on-demand).
 PY
