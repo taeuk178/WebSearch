@@ -82,14 +82,27 @@ if 'web_search' in features and features['web_search']:
   확정적으로 단정하지 않음 → request의 "출처 충돌 시 단정 금지" 요건 충족.
 - `sources` 없이 native로 호출하면 검색이 실행되지 않음(대조 확인).
 
-### 관찰된 튜닝 포인트 (v1에서 조정 대상)
+### 검색어 생성(`ENABLE_SEARCH_QUERY_GENERATION`) → **끔(False)** 으로 확정
 
-- `WEB_SEARCH_RESULT_COUNT=5`는 **검색어 1개당** 5개다. `ENABLE_SEARCH_QUERY_GENERATION`이
-  켜져 있으면 모델이 여러 검색어를 만들어 총 결과가 5를 넘을 수 있다(실측 2쿼리×5=10).
-  request의 "검색 한 번에 5개 이하"는 엔진 호출 기준으로는 충족. 총량을 엄격히 5로 제한하려면
-  검색어 생성을 끄거나 쿼리 수를 제한한다(단, 추가 LLM 호출 1회가 사라져 지연도 감소).
-- 비스트리밍 전체 응답 지연은 검색어 생성+검색+생성 포함 수십 초~2분대.
-  request의 "첫 토큰 30초 목표"는 **스트리밍 기준**으로 별도 측정 필요.
+- 켜져 있으면 모델이 여러 검색어를 만들어 총 결과가 5를 넘고(실측 2쿼리×5=10),
+  검색 전에 **thinking 모델로 검색어를 생성하는 추가 LLM 호출**이 지연을 크게 키웠다.
+- 끄면 마지막 사용자 메시지를 그대로 1개 검색어로 사용 → **결과 정확히 5개**,
+  추가 LLM 호출 제거로 지연 감소. request의 "검색 한 번에 5개 이하"를 총량 기준으로도 충족.
+
+### 스트리밍 첫 토큰 지연 (TTFT) 실측
+
+동일 질의 "오늘 서울 날씨…", 예열 상태, 스트리밍:
+
+| 조건 | 첫 토큰(사고 시작) | 첫 최종답변 토큰 | 결과 수 |
+|---|---|---|---|
+| 검색어 생성 ON | 58.9s | 90.5s | 10 |
+| 검색어 생성 OFF | **29.2s** | 75.3s | **5** |
+
+- **첫 토큰 기준 29.2s로 30초 목표 충족**(검색어 생성 OFF에서). 검색어 생성 ON이 목표 초과의 주범.
+- 다만 **첫 최종답변 토큰은 75s**로 김 — gemma-4의 긴 thinking 채널이 답변 전에 많은 토큰을
+  생성하기 때문(모델 특성). 사용자에게는 사고 과정이 먼저 스트리밍되어 체감 대기는 29s.
+- 추가 단축 여지(로드맵): 컨텍스트/스니펫 길이 축소, 사고량 억제 프롬프트, 결과 수 하향.
+- 표본 1회 측정. request의 "질문 5개 중앙값"은 운영 문서에서 반복 측정해 기록 대상.
 
 ## 채택한 검색 연동 방식
 
@@ -100,7 +113,17 @@ Open WebUI **내장 Legacy 웹 검색**을 그대로 사용한다. 별도 검색
 ENABLE_WEB_SEARCH=True
 WEB_SEARCH_ENGINE=duckduckgo
 WEB_SEARCH_RESULT_COUNT=5
+WEB_SEARCH_CONCURRENT_REQUESTS=1
 BYPASS_WEB_SEARCH_EMBEDDING_AND_RETRIEVAL=True
 BYPASS_WEB_SEARCH_WEB_LOADER=True
+ENABLE_SEARCH_QUERY_GENERATION=False
 ```
 + 모델 파라미터 `function_calling=legacy` (필수).
+
+## 추가로 실측 확인된 항목
+
+- **일반 대화(검색 미지정) 시 웹 요청 없음** — 검색 로그 증가 0.
+- **추가 LLM 호출 없음** — 일반 대화 1회에 MLX 완료 요청이 정확히 1회
+  (자동완성/후속/제목/태그 생성 비활성 env 반영 확인).
+- **검색 결과 비영속** — 검색 후 `data/vector_db/chroma.sqlite3`에 web-search 컬렉션이
+  생성되지 않고 파일 수정시각도 부팅 이후 불변. 임베딩·벡터 인덱스 미저장.
