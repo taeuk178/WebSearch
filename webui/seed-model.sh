@@ -53,9 +53,9 @@ except urllib.error.HTTPError:
     print(f"갱신: {name} (id={base_model})")
 print("function_calling=legacy, 한국어 기본 시스템 프롬프트 적용됨")
 
-# 웹 검색 토글을 기본 ON 으로 (사용자 설정 ui.webSearch). 웹 검색 전용 사용 목적.
+# 웹 검색 "항상 켜기"(사용자 설정 ui.webSearch="always"). 매 메시지가 자동으로 검색됨.
 req=urllib.request.Request(base+"/api/v1/users/user/settings/update",
-    data=json.dumps({"ui":{"webSearch":True}}).encode(), headers=H)
+    data=json.dumps({"ui":{"webSearch":"always"}}).encode(), headers=H)
 urllib.request.urlopen(req).read()
-print("웹 검색 토글 기본 ON 설정됨")
+print("웹 검색 항상 켜기(always) 설정됨")
 PY
