@@ -33,7 +33,8 @@ payload={
   "name": name,
   "meta": {"description": "Gemma-4 26B (MLX) 로컬 · 한국어 기본 · Legacy 웹 검색",
            "capabilities": {"web_search": True}},
-  "params": {"function_calling":"legacy","max_tokens":int(max_tokens),"temperature":0.6,"system":sysp},
+  # gemma-4 권장 샘플링(temp 1.0 / top_p 0.95). 낮은 temp는 thinking 채널이 반복 루프에 빠진다.
+  "params": {"function_calling":"legacy","max_tokens":int(max_tokens),"temperature":1.0,"top_p":0.95,"system":sysp},
   "access_grants": [],
   "is_active": True,
 }
