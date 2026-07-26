@@ -22,5 +22,16 @@ fi
 
 source "$HERE/.venv/bin/activate"
 
+# 모델 서버(MLX) 준비 대기 — LaunchAgent로 동시 기동 시 순서 보장용.
+# 실패해도 그대로 진행하고, LaunchAgent KeepAlive가 재시도한다.
+MLX_URL="${MLX_URL:-http://127.0.0.1:8080/v1/models}"
+for i in $(seq 1 30); do
+  if curl -sf "$MLX_URL" >/dev/null 2>&1; then
+    echo "[open-webui] 모델 서버 준비됨 (${i}s)"; break
+  fi
+  [ "$i" -eq 30 ] && echo "[open-webui] 경고: 모델 서버 미응답, 그래도 계속 진행"
+  sleep 1
+done
+
 echo "[open-webui] host=$WEBUI_HOST port=$WEBUI_PORT data=$DATA_DIR"
 exec open-webui serve --host "$WEBUI_HOST" --port "$WEBUI_PORT"

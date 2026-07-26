@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- install-launchagents.sh 가 __REPO__ / __LOGDIR__ 을 실제 경로로 치환해 생성한다. -->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>dev.gemma.model-server</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>-lc</string>
+        <string>exec "__REPO__/server/run-model-server.sh"</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>__REPO__</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- 비정상 종료 시에만 재시작 -->
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+
+    <!-- 재시작 폭주 방지 -->
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+    <!-- GPU/Metal 접근을 위해 상호작용형 프로세스로 -->
+    <key>ProcessType</key>
+    <string>Interactive</string>
+
+    <key>StandardOutPath</key>
+    <string>__LOGDIR__/model-server.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>__LOGDIR__/model-server.err.log</string>
+</dict>
+</plist>

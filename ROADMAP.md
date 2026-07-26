@@ -1,23 +1,48 @@
-# ROADMAP — 남은 운영 패키지 구현 상세
+# ROADMAP — 운영 패키지 구현 현황
 
-웹 검색 핵심(스파이크)은 검증 완료(`docs/spike-websearch.md`). 이 문서는 request의
-나머지 항목을 **나중에 직접 구현**하기 위한 상세 설계다. 각 항목은 목표 · 구현 방법 ·
-대응하는 request 완성 기준을 담는다.
+웹 검색 핵심(스파이크)은 검증 완료(`docs/spike-websearch.md`). 아래 항목 대부분이
+**구현·검증 완료**되었고, 사용자 수동 작업이 필요한 부분만 남았다. 상세 절차는 `docs/`로 옮겼다.
 
-현재까지 완료된 것:
+> 저장소 위치: `~/gemma-server` (TCC 보호 폴더인 `~/Desktop` 등에서는 LaunchAgent 자동 실행 불가).
+
+구현·검증 완료:
 - `server/run-model-server.sh` — MLX OpenAI 호환 서버(127.0.0.1:8080)
-- `webui/run-webui.sh` + `webui/.env(.example)` — Open WebUI 네이티브 실행(127.0.0.1:3000)
-- `webui/seed-model.sh` — `function_calling=legacy` 워크스페이스 모델 등록
+- `webui/run-webui.sh` + `webui/.env(.example)` — Open WebUI(127.0.0.1:3000), 모델서버 준비 대기 포함
+- `webui/seed-model.sh` — 표시명 `gemma4 26b`, `function_calling=legacy`, 한국어 기본 시스템 프롬프트
 - 웹 검색 통과: DuckDuckGo + 두 bypass 플래그 + 검색어 생성 OFF, 출처/인용 표시
+- 대화 비영속(임시 대화 강제), Arena 모델 숨김
+- ✅ **LaunchAgent 자동 실행 + KeepAlive 재시작 실증** (`launchd/*.template`, `scripts/install-launchagents.sh`)
+- `scripts/status.sh` 상태 점검, `server|webui/requirements.lock` 버전 잠금
+- 문서: `docs/install.md`, `docs/security.md`, `docs/usage.md`, `docs/troubleshooting.md`
 
-미완료(아래에 상세):
-1. macOS 자동 실행/재시작 (LaunchAgent)
-2. MacBook `connect-gemma` SSH 터널 명령
-3. Tailscale + SSH 보안 설정 및 접근 정책
-4. 임시 대화(대화 비영속) 설정
-5. 상태 점검 / 로그 / 헬스체크
-6. 문서화(설치·보안·사용·문제해결)
-7. 남은 완성 기준 검증 체크리스트
+사용자 수동 작업 필요(스크립트/문서는 준비됨):
+- `scripts/connect-gemma` — Tailscale/SSH 터널 (MacBook에서 실행, `docs/usage.md`)
+- Tailscale 로그인·ACL, macOS 원격 로그인·SSH 하드닝·공개키 등록 (`docs/security.md`)
+- 재부팅 후 물리 로그인 자동복구, 다른 네트워크 접속 등 실기기 검증 (아래 체크리스트)
+
+---
+
+아래는 각 항목의 설계 근거 원문(참고용). 실제 절차는 위 `docs/`를 따른다.
+
+## 1. macOS 자동 실행/재시작 — LaunchAgent
+
+**목표**: FileVault 유지, 재부팅 후 사용자가 한 번 물리적으로 로그인하면 모델 서버와
+Open WebUI가 자동 기동되고, 비정상 종료 시 재시작.
+(request: "사용자 로그인 후 LaunchAgent가 … 자동 실행하고 … 다시 시작된다")
+
+**방식**: 시스템 데몬(`/Library/LaunchDaemons`)이 아니라 **사용자 LaunchAgent**
+(`~/Library/LaunchAgents`)를 쓴다. 이유:
+- MLX는 사용자 GUI 세션의 Metal/GPU 접근이 필요 → 로그인 세션에서 실행해야 함.
+- FileVault라서 재부팅 후 어차피 물리 로그인 1회 필요 → 로그인 트리거가 자연스러움.
+- ⚠️ 저장소가 TCC 보호 폴더(`~/Desktop` 등)에 있으면 launchd 프로세스가 파일 접근을
+  거부당해(`Operation not permitted`) 즉시 죽는다. `~/gemma-server`로 둔다.
+
+**만들 파일** (구현됨, 템플릿):
+- `launchd/dev.gemma.model-server.plist.template`
+- `launchd/dev.gemma.webui.plist.template`
+
+**plist 핵심 키**:
+```
 
 ---
 
@@ -207,18 +232,21 @@ mlx-lm 0.31.3 / mlx 0.32.0 / open-webui 0.10.2 / Python 3.12·3.11 기록,
 
 ## 7. 남은 완성 기준 검증 체크리스트
 
-구현 후 아래를 실제로 확인(스파이크에서 이미 ✅ 표시한 항목 제외):
+이미 검증됨(✅) / 실기기·수동 확인 필요(☐):
 
-- [ ] 재부팅 → 1회 로그인 → 두 서비스 자동 복구 → 새 터널로 재접속
+- [x] LaunchAgent 로드 시 두 서비스 자동 기동 + 강제 종료 시 KeepAlive 재시작 (실증)
+- [x] `gemma4 26b`만 노출(Arena 숨김), 로컬 경로 미표시
+- [x] 웹 검색 시 서로 다른 출처 5개 + 클릭 가능한 인용 표시
+- [x] 일반 대화 시 웹 요청 0, 추가 LLM 호출 없음(대화 1회=MLX 1회)
+- [x] 검색 결과 임베딩/벡터 미저장(chroma 컬렉션 없음)
+- [ ] 재부팅 → 1회 물리 로그인 → 두 서비스 자동 복구 → 새 터널로 재접속
 - [ ] 다른 네트워크(핫스팟)에서 Tailscale+connect-gemma 터널 성공
 - [ ] 터널 종료 시 `http://127.0.0.1:3000` 즉시 실패
 - [ ] SSH 터널 없이 LAN/Tailscale/공인으로 3000·8080 직접 접근 불가
 - [ ] MacBook Tailscale OFF 시 터널 생성 불가
 - [ ] 비밀번호 SSH 거부, 등록 키 사용자만 접속
-- [ ] 웹 검색 질문에 서로 다른 출처 3개 이상 클릭 가능(스파이크에서 5개 확인)
 - [ ] 웹 검색 10회 연속 시 모델 서버 OOM 종료 없음
-- [ ] 임시 대화 종료 후 기록 잔류 없음
+- [ ] 임시 대화 종료 후 기록 잔류 없음(설정은 강제됨, 실사용 확인)
 - [ ] 로그/네트워크 점검으로 프롬프트가 외부 LLM API로 전송되지 않음 확인
-      (검색어·페이지 요청만 외부로, 대화/추론은 로컬)
 - [ ] 웹 검색 질문 5개 첫 토큰 중앙값 측정·기록(목표 30초; 스파이크 단일표본 29.2s)
 - [ ] 새 MacBook / 새 Mac mini에서 문서대로 재현

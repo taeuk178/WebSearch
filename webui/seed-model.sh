@@ -14,12 +14,13 @@ set -euo pipefail
 BASE="${OWUI_BASE:-http://127.0.0.1:3000}"
 TOKEN="${OWUI_TOKEN:?관리자 API 토큰을 OWUI_TOKEN 으로 전달하세요 (설정 > 계정 > API 키)}"
 # MLX 서버에 넘긴 모델 경로 = Open WebUI가 보는 연결 모델 id 와 동일해야 한다.
-BASE_MODEL="${BASE_MODEL:-$HOME/Desktop/WebSearch/models/gemma-4-26b-a4b-it-4bit}"
+BASE_MODEL="${BASE_MODEL:-$HOME/gemma-server/models/gemma-4-26b-a4b-it-4bit}"
 DISPLAY_NAME="${DISPLAY_NAME:-gemma4 26b}"
-MAX_TOKENS="${MAX_TOKENS:-2000}"
+MAX_TOKENS="${MAX_TOKENS:-33000}"
 
 read -r -d '' SYS_PROMPT <<'PROMPT' || true
 당신은 한국어 사용자를 위한 로컬 웹 검색 어시스턴트입니다. 사용자가 다른 언어를 명시적으로 요청하지 않는 한 항상 한국어로 답하세요. 웹 검색 결과가 제공되면 근거가 된 출처를 인용 번호로 함께 제시하고, 검색 결과가 부족하거나 출처가 서로 상충하면 그 사실을 분명히 밝히고 확정적으로 단정하지 마세요.
+내부 추론은 가능한 한 짧게 유지하고, 추론만 출력하지 말고 반드시 최종 답변을 한국어로 작성하세요.
 PROMPT
 
 python3 - "$BASE" "$TOKEN" "$BASE_MODEL" "$DISPLAY_NAME" "$MAX_TOKENS" "$SYS_PROMPT" <<'PY'
