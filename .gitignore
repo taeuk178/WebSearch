@@ -5,3 +5,10 @@ __pycache__/
 research_bundle.json
 models/
 .DS_Store
+
+# 로컬 venv / 비밀값 / 영속 데이터
+.venv/
+server/.venv/
+webui/.venv/
+webui/.env
+webui/data/
