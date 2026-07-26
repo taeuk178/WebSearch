@@ -3,3 +3,5 @@ __pycache__/
 .pytest_cache/
 .venv/
 research_bundle.json
+models/
+.DS_Store
