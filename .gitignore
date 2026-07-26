@@ -3,3 +3,15 @@ __pycache__/
 .pytest_cache/
 .venv/
 research_bundle.json
+models/
+.DS_Store
+
+# 로컬 venv / 비밀값 / 영속 데이터
+.venv/
+server/.venv/
+webui/.venv/
+webui/.env
+webui/data/
+
+# MacBook 로컬 접속 설정 (비밀 아님이지만 호스트/사용자 식별정보)
+scripts/connect-gemma.env

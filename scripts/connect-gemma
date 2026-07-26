@@ -1,0 +1,60 @@
+#!/bin/bash
+# MacBook에서 실행: Tailscale 위 SSH 로컬 포트 포워딩으로 Mac mini의 Open WebUI에 접속한다.
+#   MacBook 127.0.0.1:<LOCAL> -> Mac mini 127.0.0.1:<REMOTE>
+# 접속 후 MacBook 브라우저에서 http://127.0.0.1:<LOCAL> 로 사용.
+#
+# 설정: connect-gemma.env (connect-gemma.env.example 복사) 또는 환경변수로 지정.
+#   GEMMA_SSH_HOST : Mac mini 의 Tailscale 호스트명(MagicDNS) 또는 tailnet IP  (필수)
+#   GEMMA_SSH_USER : Mac mini 사용자명 (필수)
+#   LOCAL_PORT     : MacBook 로컬 포트 (기본 3000)
+#   REMOTE_PORT    : Mac mini Open WebUI 포트 (기본 3000)
+#
+# 사용:
+#   connect-gemma            # 터널만 연다 (Ctrl-C 로 종료)
+#   connect-gemma --open     # 터널 후 기본 브라우저로 http://127.0.0.1:<LOCAL> 열기
+set -euo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+[ -f "$HERE/connect-gemma.env" ] && { set -a; source "$HERE/connect-gemma.env"; set +a; }
+
+: "${GEMMA_SSH_HOST:?GEMMA_SSH_HOST(Tailscale 호스트/IP)를 설정하세요}"
+: "${GEMMA_SSH_USER:?GEMMA_SSH_USER(Mac mini 사용자명)를 설정하세요}"
+LOCAL_PORT="${LOCAL_PORT:-3000}"
+REMOTE_PORT="${REMOTE_PORT:-3000}"
+OPEN_BROWSER=false
+[ "${1:-}" = "--open" ] && OPEN_BROWSER=true
+
+# 1) Tailscale 연결 확인 (없으면 터널 불가)
+if command -v tailscale >/dev/null 2>&1; then
+  tailscale status >/dev/null 2>&1 || { echo "오류: Tailscale이 연결되어 있지 않습니다. Tailscale을 켜세요."; exit 1; }
+fi
+
+# 2) 로컬 포트 점유 확인
+if lsof -nP -iTCP:"$LOCAL_PORT" -sTCP:LISTEN >/dev/null 2>&1; then
+  echo "오류: 로컬 포트 $LOCAL_PORT 가 이미 사용 중입니다. LOCAL_PORT 를 바꾸거나 기존 프로세스를 종료하세요."
+  exit 1
+fi
+
+# 3) Ctrl-C / 종료 시 터널·자식 프로세스 함께 정리
+cleanup() { echo; echo "터널 종료. http://127.0.0.1:$LOCAL_PORT 접근이 닫힙니다."; kill 0 2>/dev/null || true; }
+trap cleanup INT TERM EXIT
+
+echo "터널 생성: 127.0.0.1:$LOCAL_PORT -> $GEMMA_SSH_HOST:127.0.0.1:$REMOTE_PORT (Tailscale/SSH)"
+
+if $OPEN_BROWSER; then
+  ( sleep 2; open "http://127.0.0.1:$LOCAL_PORT" ) &
+fi
+
+# 4) 연결 유지(keepalive) + 포워딩 실패 즉시 감지(ExitOnForwardFailure).
+#    끊기면 5초 후 자동 재연결. Ctrl-C 로 종료.
+while true; do
+  ssh -N \
+    -L "127.0.0.1:$LOCAL_PORT:127.0.0.1:$REMOTE_PORT" \
+    -o ExitOnForwardFailure=yes \
+    -o ServerAliveInterval=15 \
+    -o ServerAliveCountMax=3 \
+    -o ConnectTimeout=10 \
+    "$GEMMA_SSH_USER@$GEMMA_SSH_HOST" || true
+  echo "연결이 끊겼습니다. 5초 후 재시도... (Ctrl-C 로 종료)"
+  sleep 5
+done

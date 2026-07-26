@@ -1,74 +1,53 @@
-# WebSearch Deep Research Prototype
+# gemma-server — Mac mini 개인용 웹 검색 AI 서버
 
-Perplexity-style deep research flow prototype:
+Mac mini(M4)에서 `mlx-community/gemma-4-26b-a4b-it-4bit`를 MLX로 로컬 실행하고,
+Open WebUI로 대화·**실시간 웹 검색**·출처 확인을 제공하는 개인용 서버.
+외부(MacBook)에서는 Tailscale 위 SSH 로컬 포트 포워딩으로만 접속한다.
 
-```text
-queued -> planning -> initial_queries -> searching -> reading -> ranking
--> follow_up_queries -> searching_outline_gaps -> evidence_memory
--> dynamic_outline -> preparing_bundle -> completed
+- 요구사항 원본: [request.md](request.md)
+- 웹 검색 호환성 검증 결과: [docs/spike-websearch.md](docs/spike-websearch.md)
+
+## 아키텍처
+
+```
+[MacBook] --Tailscale/SSH 터널--> [Mac mini]
+  브라우저                          ├─ MLX 모델 서버 (127.0.0.1:8080, OpenAI 호환)
+  127.0.0.1:3000  ── SSH -L ──▶     └─ Open WebUI    (127.0.0.1:3000)
+                                          └─ DuckDuckGo 웹 검색(스니펫 직접 주입)
 ```
 
-## Run
+- 모델 API와 Open WebUI는 **`127.0.0.1`에만 바인딩** (LAN/tailnet/공인 미노출).
+- 원격 접속은 Tailscale 인증 + SSH 공개키. SSH 터널이 열려 있을 때만 사용 가능.
+- 검색·대화 내용은 **영구 저장하지 않음**(임시 대화 강제, 스니펫만 메모리 사용).
 
-```bash
-python -m deep_research.cli "의료 신경과학 공부하는 방법"
+## 구성요소 (고정 버전)
+
+| | 버전 |
+|---|---|
+| mlx-lm / mlx | 0.31.3 / 0.32.0 |
+| open-webui | 0.10.2 |
+| Python | 서버 3.12 · WebUI 3.11 (uv) |
+| 잠금 파일 | `server/requirements.lock`, `webui/requirements.lock` |
+
+## 디렉터리
+
+```
+server/   MLX 모델 서버 (run-model-server.sh, venv, lock)
+webui/    Open WebUI (run-webui.sh, seed-model.sh, .env.example, venv, lock)
+launchd/  LaunchAgent plist 템플릿 (자동 실행/재시작)
+scripts/  install-launchagents.sh, status.sh, connect-gemma(MacBook)
+docs/     install / security / usage / troubleshooting / spike-websearch
+models/   gemma-4-26b-a4b-it-4bit (14GB, git 제외)
 ```
 
-Full JSON bundle:
+## 빠른 시작
 
-```bash
-python -m deep_research.cli "의료 신경과학 공부하는 방법" --json
-```
+1. 설치: [docs/install.md](docs/install.md)
+2. 보안(Tailscale/SSH): [docs/security.md](docs/security.md)
+3. 사용(MacBook 접속): [docs/usage.md](docs/usage.md)
+4. 문제 해결: [docs/troubleshooting.md](docs/troubleshooting.md)
 
-Use Brave Search instead of the deterministic mock provider:
+상태 점검: `./scripts/status.sh`
 
-```bash
-BRAVE_SEARCH_API_KEY=... python -m deep_research.cli "의료 신경과학 공부하는 방법" --search-provider brave
-```
-
-You can also set `DEEP_RESEARCH_SEARCH_PROVIDER=brave`.
-
-Use the arXiv API for paper search. arXiv requests are rate-limited to at least 3.5 seconds apart by default:
-
-```bash
-python -m deep_research.cli "agentic search 논문 요약" --search-provider arxiv
-```
-
-Override the arXiv interval only when you deliberately need a different local policy:
-
-```bash
-python -m deep_research.cli "agentic search 논문 요약" --search-provider arxiv --arxiv-delay 3.5
-```
-
-Fetch and extract page text instead of using only search snippets:
-
-```bash
-BRAVE_SEARCH_API_KEY=... python -m deep_research.cli "의료 신경과학 공부하는 방법" --search-provider brave --read-pages
-```
-
-Run the local SSE API and minimal browser UI:
-
-```bash
-python -m deep_research.server --host 127.0.0.1 --port 8000
-```
-
-Then open `http://127.0.0.1:8000`.
-
-## Architecture
-
-- `deep_research.pipeline.DeepResearchPipeline`: orchestrates the staged workflow.
-  It also deduplicates sources by canonical URL and near-duplicate fingerprint before evidence extraction and final ranking.
-- `deep_research.reader.PageReader`: replaceable document reading interface.
-- `deep_research.reader.SnippetReader`: default reader that uses search snippets.
-- `deep_research.reader.HttpPageReader`: optional dependency-free HTML/text reader with snippet fallback and basic chunking.
-- `deep_research.writer.AnswerWriter`: replaceable answer composition interface.
-- `deep_research.writer.EvidenceAnswerWriter`: deterministic evidence-aware writer that preserves source IDs.
-- `deep_research.policy`: execution cautions and rate limiting policy. arXiv API and arXiv page reads use a 3.5-second minimum interval.
-- `deep_research.safety.assess_safety`: routes medical risk levels and source quality requirements.
-- `deep_research.server`: standard-library SSE endpoint (`POST /research`) and minimal UI (`GET /`).
-- `deep_research.search.SearchProvider`: replaceable search interface.
-- `deep_research.search.MockSearchProvider`: deterministic local provider for development and tests.
-- `deep_research.search.BraveSearchProvider`: optional real search provider using the Brave Search API.
-- `deep_research.models`: typed state, source, evidence, and bundle objects.
-
-Additional production search backends can be added by implementing `SearchProvider` for Tavily, Exa, Bing, or a custom crawler. The writer step can also be replaced with an LLM-backed answer composer while preserving the same evidence bundle contract.
+> ⚠️ 저장소는 `~/gemma-server`에 둔다. `~/Desktop`·`~/Documents`·`~/Downloads`는
+> macOS 프라이버시(TCC) 보호 폴더라 LaunchAgent 자동 실행이 차단된다.

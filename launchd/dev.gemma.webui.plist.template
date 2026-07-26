@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- install-launchagents.sh 가 __REPO__ / __LOGDIR__ 을 실제 경로로 치환해 생성한다. -->
+<!-- run-webui.sh 시작부에서 모델 서버(8080) 준비를 대기하므로 기동 순서는 자체 보장된다. -->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>dev.gemma.webui</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>-lc</string>
+        <string>exec "__REPO__/webui/run-webui.sh"</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>__REPO__</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+    <key>ProcessType</key>
+    <string>Interactive</string>
+
+    <key>StandardOutPath</key>
+    <string>__LOGDIR__/webui.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>__LOGDIR__/webui.err.log</string>
+</dict>
+</plist>
