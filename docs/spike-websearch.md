@@ -59,9 +59,14 @@ if 'web_search' in features and features['web_search']:
   **native 상태에서는 웹 검색이 아예 실행되지 않는다.** (실측: 검색 로그 없이 모델이
   "지식 컷오프" 답변만 반환)
 - 해결: 모델의 기본 파라미터를 `function_calling=legacy`로 고정한다.
-  → 이 저장소에서는 워크스페이스 모델 `mlx-community/gemma-4-26b-a4b-it-4bit`를
-  `function_calling=legacy`, `max_tokens=2000`으로 등록하여 UI에서 파라미터 지정 없이
-  동작하게 한다. (`webui/seed-model.sh` 참조)
+  → 이 저장소에서는 MLX 연결 모델(id=모델 절대경로)을 워크스페이스 설정으로 **오버라이드**하여
+  표시명을 `gemma4 26b`로 바꾸고(로컬 경로 숨김), `function_calling=legacy`, `max_tokens=2000`,
+  그리고 **기본 언어 한국어 시스템 프롬프트**를 주입한다. UI에서 파라미터 지정 없이 동작.
+  (`webui/seed-model.sh` 참조)
+
+> 기본 언어 설정: Open WebUI에는 CLAUDE.md 같은 파일 기반 전역 지침이 없다. 동등한 역할은
+> **시스템 프롬프트**가 한다. 위 모델의 `params.system`에 "항상 한국어로 답하라"를 넣어
+> 이 모델 사용 시 전역 적용되게 했다. (사용자 전역으로 하려면 설정 > 일반 > 시스템 프롬프트도 사용 가능)
 
 ### thinking 채널과 max_tokens
 
