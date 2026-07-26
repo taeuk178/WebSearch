@@ -52,4 +52,10 @@ except urllib.error.HTTPError:
     call("/api/v1/models/model/update?id="+urllib.parse.quote(base_model, safe=""))
     print(f"갱신: {name} (id={base_model})")
 print("function_calling=legacy, 한국어 기본 시스템 프롬프트 적용됨")
+
+# 웹 검색 토글을 기본 ON 으로 (사용자 설정 ui.webSearch). 웹 검색 전용 사용 목적.
+req=urllib.request.Request(base+"/api/v1/users/user/settings/update",
+    data=json.dumps({"ui":{"webSearch":True}}).encode(), headers=H)
+urllib.request.urlopen(req).read()
+print("웹 검색 토글 기본 ON 설정됨")
 PY
