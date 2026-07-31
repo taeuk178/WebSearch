@@ -12,17 +12,33 @@
 
 | # | 항목 | 상태 | 비고 |
 |---|---|---|---|
+| 0 | **Open WebUI 가입 잠그기** | **미적용** | 현재 누구나 관리자 계정 생성 가능. 원격 노출 전 필수 |
 | 1 | SSH 하드닝 적용 | **미적용** | 현재 비밀번호 인증 ON. 보안 모델의 핵심 전제가 깨진 상태 |
-| 2 | 재부팅 자동복구 실기기 검증 | 미검증 | SearXNG LaunchAgent 추가 후 3개 서비스 기준으로 재확인 필요 |
-| 3 | 웹 검색 토글 실사용 검증 | **미검증** | 아래 4장 참조. 모델·검색엔진이 모두 바뀌어 기존 검증이 무효 |
-| 4 | 네트워크 격리 검증 | 미검증 | 핫스팟 접속, 터널 종료 시 차단, 직접 접근 불가 |
-| 5 | 성능 재측정 | 미측정 | 첫 토큰 지연·연속 검색 OOM. 모델 교체로 전제가 바뀜 |
-| 6 | Tailscale ACL 문서화 적용 | 선택 | `docs/security.md`에 예시 기재됨 |
+| 2 | **Cloudflare 원격 접속 구축** | 착수 전 | 7장에 상세 계획. 사내 맥북 접속 목적 |
+| 3 | 재부팅 자동복구 실기기 검증 | 미검증 | SearXNG LaunchAgent 추가 후 3개 서비스 기준으로 재확인 필요 |
+| 4 | 웹 검색 토글 실사용 검증 | **미검증** | 아래 4장 참조. 모델·검색엔진이 모두 바뀌어 기존 검증이 무효 |
+| 5 | 네트워크 격리 검증 | 미검증 | 핫스팟 접속, 터널 종료 시 차단, 직접 접근 불가 |
+| 6 | 성능 재측정 | 미측정 | 첫 토큰 지연·연속 검색 OOM. 모델 교체로 전제가 바뀜 |
+| 7 | Tailscale ACL 문서화 적용 | 선택 | `docs/security.md`에 예시 기재됨 |
 
-1번이 가장 중요하다. 이 서버의 보안 모델 전체가 "Tailscale + SSH 공개키 전용"에
+**0번이 가장 급하다.** `webui/.env` 가 아래 상태다.
+
+```
+ENABLE_SIGNUP=True
+DEFAULT_USER_ROLE=admin
+```
+
+지금은 SSH 터널이 장벽 역할을 해서 실질 위험이 낮지만, 7장의 원격 접속을 열면
+**공개 접점에 닿는 누구나 비밀번호도 초대도 없이 관리자 계정을 만들 수 있다.**
+`docs/install.md` 에도 "관리자 생성 후 False 로 되돌리라"고 적혀 있으나 되돌려지지
+않았다. `ENABLE_SIGNUP=False`, `DEFAULT_USER_ROLE=pending` 으로 고친다.
+
+1번도 같은 성격이다. 이 서버의 보안 모델 전체가 "Tailscale + SSH 공개키 전용"에
 의존하는데, 지금은 비밀번호로도 로그인된다. `config/sshd_config.d/gemma.conf`가
 준비돼 있고 적용만 남았다. **모든 기기의 키 로그인을 먼저 확인**해야 한다 —
 순서를 틀리면 원격 접속이 막힌다. 절차: `docs/security.md` 3-3.
+
+0번과 1번 없이 2번을 먼저 하면 **지금보다 덜 안전해진다.**
 
 ---
 
@@ -184,6 +200,8 @@ CAPTCHA에 걸리지 않을지는 켜서 재봐야 한다. SearXNG는 `!nvr 검�
 - [ ] 로그/네트워크 점검으로 프롬프트가 외부 LLM API로 전송되지 않음 확인
 - [ ] 새 MacBook / 새 Mac mini에서 문서대로 재현
 
+원격 접속(7장) 관련 검증 항목은 7-6에 따로 두었다.
+
 ---
 
 ## 6. 설계 근거 (참고용)
@@ -284,3 +302,171 @@ mlx-lm 0.31.3 / mlx 0.32.0 / open-webui 0.10.2 / Python 3.12·3.11.
 
 SearXNG는 소스 클론(`searxng/src`)이라 잠금 파일이 없다. 재현이 필요하면
 클론 시점의 커밋 해시를 기록해 둘 것.
+
+---
+
+## 7. 원격 접속 — Cloudflare Tunnel + Access
+
+### 7-1. 목적과 결정
+
+**목적**: 사내 맥북과 개인 맥북에서 **동일한 방법으로** 웹 검색 AI를 쓴다.
+
+현행 방식(Tailscale + SSH 터널)은 회사 기기에서 막힐 가능성이 크다. Tailscale은
+VPN·네트워크 확장(Network Extension) 권한을 요구하는데 MDM이 강하게 통제하는
+영역이다. "소프트웨어 설치"가 아니라 **권한 등급**이 문제다.
+
+검토한 대안과 탈락 사유:
+
+| 방안 | 회사기기 설치 | 인증 | 내용 경유 | 탈락 사유 |
+|---|---|---|---|---|
+| Tailscale + SSH (현행) | 필요 (VPN 확장) | SSH 키 | 없음 | 회사 기기에서 설치 불가 가능성 |
+| Tailscale Serve | 필요 (VPN 확장) | WebUI 로그인 | 없음 | 위와 동일 |
+| VPS + 중첩 SSH (ProxyJump) | 불필요 | SSH 키 | **복호화 불가** | 사내 외부 SSH 차단 시 무력 |
+| **Cloudflare Tunnel + Access** | 불필요 | **내장** | Cloudflare | **채택** |
+| Tailscale Funnel | 불필요 | 없음 | Tailscale | 인증 부재 |
+| 메신저 봇 브리지 | 불필요 | 메신저 계정 | 메신저 사업자 | 프라이버시 이점 없음 |
+| 공유기 포트 포워딩 | 불필요 | 없음 | 없음 | 요구사항이 명시적으로 금지 |
+
+**Cloudflare를 택한 이유**는 사내망 호환성이다. 평범한 HTTPS 443 트래픽이라
+방화벽 통과율이 가장 높다. VPS 중첩 SSH가 프라이버시 면에서 우수하지만
+(중계 서버가 내부 SSH 암호문만 보므로 복호화 불가), 회사가 외부 SSH를 막으면
+그대로 무력해진다. 그 위험을 감수하지 않기로 했다.
+
+### 7-2. 감수하기로 한 트레이드오프
+
+**Cloudflare가 TLS를 종료한다. 질문·답변 전체가 그들이 평문으로 볼 수 있는
+지점을 지나간다.**
+
+이는 README 의 "검색어는 외부 대행 서비스를 거치지 않는다"와 충돌한다.
+같은 이유로 Firecrawl(검색어만 외부 전송)을 보류했는데, 이쪽은 **대화 전체**라
+노출 범위가 더 넓다. 사내 접속이라는 목적을 위해 의식적으로 감수하는 것이며,
+"모르고 지나간" 사항이 아니다.
+
+부수 위험:
+- 공개 호스트명이 DNS·CT 로그에 남는다. Access 설정을 한 번 잘못하면 **즉시
+  공개 노출**이다. SSH 방식은 설정 실수해도 공개되지 않는다 — 실패 모드의
+  성격이 다르다.
+- Cloudflare 계정이 단일 의존점이 된다.
+- 회사 기기라면 복호화된 내용이 그 기기에서 보인다. 전송 암호화는 엔드포인트를
+  보호하지 못한다(MDM·화면 캡처·키로깅).
+- 기술적 안전과 별개로, 회사 기기에서 개인 서버에 접속하는 것이 **사내 정책상
+  허용되는지**는 별도 확인 사항이다.
+
+### 7-3. 비용
+
+Cloudflare Tunnel·Access(Zero Trust) 는 개인 사용 규모에서 **무료**다.
+실제 비용은 도메인뿐이며, Cloudflare Registrar 는 마크업 없이 원가로 판다
+(레지스트리 도매가 + ICANN 수수료 $0.18). 등록가와 갱신가가 같고 첫해 할인이
+없어 장기 비용 예측이 쉽다.
+
+| TLD | 연 비용(등록=갱신) |
+|---|---|
+| **.com** | **약 $10.4** |
+| .dev | 약 $10.2 |
+| .org | 약 $10.1 (첫해 $7.5) |
+| .net | 약 $11.9 |
+| .app | 약 $12.2 |
+| .io | 약 $45 |
+
+→ **연 1.5만원 안팎**이면 충분하다. `.com` 또는 `.dev` 를 권한다.
+
+주의: 가격은 2026-08 조회 기준이며 레지스트리 정책에 따라 변동한다.
+그리고 Cloudflare Registrar 는 **Cloudflare 네임서버 사용이 강제**된다.
+
+### 7-4. 작업 항목
+
+**A. 선행 조건 (원격 노출 전 반드시)**
+
+- [ ] `webui/.env`: `ENABLE_SIGNUP=False`
+- [ ] `webui/.env`: `DEFAULT_USER_ROLE=pending`
+- [ ] 기존 계정 점검 — 불필요한 관리자 계정 제거 (`webui/data/webui.db` 의 `user` 테이블)
+- [ ] SSH 하드닝 적용 (0장 1번)
+- [ ] 세 서비스가 `127.0.0.1` 에만 바인딩됐는지 재확인 (`scripts/status.sh`)
+
+**B. 도메인·계정 준비**
+
+- [ ] 도메인 결정 및 구매 (Cloudflare Registrar 권장, 연 $10~12)
+- [ ] Cloudflare 계정 생성, 도메인의 네임서버를 Cloudflare 로 위임
+- [ ] Zero Trust 대시보드 활성화 (무료 플랜)
+
+**C. Tunnel 구축**
+
+- [ ] Mac mini 에 `cloudflared` 설치 (`brew install cloudflared`)
+- [ ] `cloudflared tunnel login` → 인증서 발급
+- [ ] 터널 생성 (`cloudflared tunnel create gemma`)
+- [ ] **ingress 에 3000 만 등록.** 8080(모델 API)·8888(SearXNG) 은 절대 넣지 않는다.
+      하나라도 들어가면 인증 없는 모델 API 가 공개된다
+- [ ] DNS 라우팅 (`cloudflared tunnel route dns gemma ai.<도메인>`)
+- [ ] 수동 기동으로 접속 확인
+
+예상 `config.yml` 형태:
+```yaml
+tunnel: <TUNNEL_ID>
+credentials-file: /Users/taeuk/.cloudflared/<TUNNEL_ID>.json
+ingress:
+  - hostname: ai.<도메인>
+    service: http://127.0.0.1:3000
+  - service: http_status:404      # 그 외 전부 차단
+```
+
+**D. Access 정책**
+
+- [ ] Access Application 생성 (도메인: `ai.<도메인>`)
+- [ ] 정책을 **지정 이메일 화이트리스트**로 설정. "인증된 아무나" 금지
+- [ ] MFA 활성화
+- [ ] 세션 수명 설정 (회사 기기 고려해 짧게)
+- [ ] CLI·자작 앱용 **서비스 토큰** 발급 (별도 정책으로 분리)
+- [ ] Open WebUI 자체 로그인 **유지** — Access 만 믿지 않는다(이중 방어)
+
+**E. 상시 운영**
+
+- [ ] `launchd/dev.gemma.cloudflared.plist.template` 작성
+      (SearXNG 용과 동일 구조, `ProcessType: Background`)
+- [ ] `scripts/install-launchagents.sh` 의 `LABELS` 에 추가
+- [ ] `scripts/status.sh` 에 터널 상태 점검 추가
+- [ ] 로그 경로 `~/Library/Logs/gemma/cloudflared.{out,err}.log`
+
+**F. 문서**
+
+- [ ] `docs/remote-access.md` 신설 — 방안 비교, 결정 근거, 구축 절차
+- [ ] `docs/usage.md` — 사내/개인 맥북 공통 접속 방법 추가
+- [ ] `docs/security.md` — Cloudflare 신뢰 경계와 Access 정책 기재
+- [ ] `docs/troubleshooting.md` — 터널 끊김, Access 인증 실패 대응
+- [ ] `README.md` — 아키텍처 다이어그램에 외부 접속 경로 반영
+
+### 7-5. CLI·앱에서 쓰기
+
+전송이 열리면 클라이언트는 자유롭게 고를 수 있다. 웹 검색은 서버 사이드라
+**포트 3000 하나만 닿으면 동작한다.**
+
+```bash
+curl https://ai.<도메인>/api/chat/completions \
+  -H "CF-Access-Client-Id: <서비스토큰 ID>" \
+  -H "CF-Access-Client-Secret: <서비스토큰 Secret>" \
+  -H "Authorization: Bearer <Open WebUI API 키>" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"<모델 경로>","messages":[...],"features":{"web_search":true}}'
+```
+
+`features.web_search` 로 검색이 붙는 것은 소스에서 확인했다
+(`utils/middleware.py`, `function_calling=legacy` 조건 — 이미 그렇게 시드돼 있다).
+
+**주의**: 모델 서버(8080)를 직접 부르면 웹 검색이 되지 않는다. 검색은 Open WebUI
+의 기능이다.
+
+자작 macOS 앱도 같은 API 를 쓴다. 앱은 평범한 HTTPS 클라이언트라 Tailscale 이
+걸리는 네트워크 확장 권한이 필요 없다 — 이 점이 앱 방식의 이점이다. 다만 MDM 이
+서명되지 않은 앱 설치 자체를 막는지는 별도 확인이 필요하다.
+아직 확인하지 않은 것: 출처·인용이 스트림에 실려 오는 포맷.
+
+### 7-6. 검증 항목
+
+- [ ] 개인 맥북에서 `https://ai.<도메인>` 접속 → Access 인증 → 대화 성공
+- [ ] **사내 맥북**에서 동일 절차 성공 (방화벽 통과 확인)
+- [ ] 웹 검색 토글 동작 + 출처 인용 표시
+- [ ] Access 인증 없이 접근 시 차단되는지 (시크릿 창 / 다른 계정)
+- [ ] `https://ai.<도메인>` 외 경로가 404 인지 (ingress catch-all 동작)
+- [ ] 8080·8888 이 외부에서 접근 불가인지
+- [ ] `curl` + 서비스 토큰으로 CLI 응답 성공
+- [ ] Mac mini 재부팅 후 터널 자동 복구
+- [ ] 터널 중단 시 접속이 즉시 실패하는지
