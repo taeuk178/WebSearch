@@ -1,5 +1,5 @@
 #!/bin/bash
-# Mac mini에서 실행: gemma 모델 서버 + Open WebUI 를 사용자 LaunchAgent로 등록한다.
+# Mac mini에서 실행: 모델 서버 + SearXNG + Open WebUI 를 사용자 LaunchAgent로 등록한다.
 # 로그인 시 자동 실행되고, 비정상 종료 시 재시작된다(KeepAlive).
 #
 # 사용:
@@ -11,7 +11,8 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LA_DIR="$HOME/Library/LaunchAgents"
 LOG_DIR="$HOME/Library/Logs/gemma"
-LABELS=(dev.gemma.model-server dev.gemma.webui)
+# searxng 는 웹 검색 백엔드. 없으면 검색만 실패하고 대화는 정상 동작한다.
+LABELS=(dev.gemma.model-server dev.gemma.searxng dev.gemma.webui)
 
 uninstall() {
   for L in "${LABELS[@]}"; do

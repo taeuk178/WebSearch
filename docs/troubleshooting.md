@@ -1,7 +1,8 @@
 # 문제 해결
 
 먼저 `~/gemma-server/scripts/status.sh` 로 전체 상태를 본다.
-로그: `~/Library/Logs/gemma/model-server.{out,err}.log`, `webui.{out,err}.log`.
+로그: `~/Library/Logs/gemma/` 아래 `model-server.{out,err}.log`,
+`searxng.{out,err}.log`, `webui.{out,err}.log`.
 
 ## LaunchAgent가 바로 죽는다 (`launchctl list`에 exit 78/126/-)
 
@@ -14,26 +15,65 @@
 ## 모델 로딩 실패
 
 - `model-server.err.log` 확인. 모델 파일 경로/무결성 확인:
-  `ls -la ~/gemma-server/models/gemma-4-26b-a4b-it-4bit/*.safetensors`
+  `ls -la ~/gemma-server/models/Qwen3.6-35B-A3B-4bit/*.safetensors`
 - mlx 버전 불일치: `server/requirements.lock` 로 재설치.
 
 ## 웹 검색이 안 된다 (검색 없이 일반 답변만 나옴)
 
 - **가장 흔한 원인**: 모델 파라미터 `function_calling`이 `legacy`가 아님.
-  `gemma4 26b`가 `function_calling=legacy`로 설정됐는지 확인, 아니면 `seed-model.sh` 재실행.
+  `Qwen3.6 35B`가 `function_calling=legacy`로 설정됐는지 확인, 아니면 `seed-model.sh` 재실행.
 - 입력창 웹 검색 토글이 켜져 있는지 확인.
-- `webui/.env`에 `ENABLE_WEB_SEARCH=True`, `WEB_SEARCH_ENGINE=duckduckgo` 확인.
+- `webui/.env`에 `ENABLE_WEB_SEARCH=True`, `WEB_SEARCH_ENGINE=searxng`,
+  `SEARXNG_QUERY_URL=http://127.0.0.1:8888/search` 확인.
 - 자세한 배경: [spike-websearch.md](spike-websearch.md).
 
-## 답변이 비어서 나온다 (사고만 하고 끝남)
+## "An error occurred while searching the web"
 
-- gemma-4의 thinking 채널이 길어 `max_tokens`를 초과. `MAX_TOKENS`를 키우고 재시드.
+검색 공급자가 결과 0건을 내거나 예외를 던졌다. `webui.err.log`에서
+`WEB_SEARCH_ERROR` 또는 `process_web_search`를 찾는다.
 
-## 검색은 되는데 특정 URL/공급자 실패
+- **SearXNG가 안 떠 있음** — `curl -s "127.0.0.1:8888/search?q=test&format=json"`으로 확인.
+  죽었으면 `./searxng/run-searxng.sh` 또는 LaunchAgent 재로드.
+- **SearXNG의 json 출력이 꺼짐** — `searxng/settings.yml`의 `search.formats`에
+  `json`이 있어야 한다. 기본값은 html뿐이라 이게 빠지면 검색이 전혀 동작하지 않는다.
+- **엔진이 전부 막힘** — 아래 항목 참조.
 
-- 개별 URL 실패는 무시되고 나머지로 답한다. 검색 공급자 자체가 실패하면 webui가
-  사용자에게 실패를 알리며 서비스는 죽지 않는다. 필요 시 `WEB_SEARCH_ENGINE`을
-  SearXNG/Brave/Tavily로 교체(관련 키 설정).
+> 과거에 `WEB_SEARCH_ENGINE=duckduckgo` + `DDGS_BACKEND` 고정 조합에서 이 오류가
+> 재현됐다. `ddgs`가 0건일 때 던지는 `DDGSException`을 Open WebUI가 잡지 않아
+> 검색 전체가 400으로 끝난다(`RatelimitException`만 잡는다). 그래서 SearXNG로 옮겼다.
+
+## 검색 결과가 엉뚱하다 / 결과 수가 적다
+
+SearXNG의 어느 엔진이 살아 있는지 본다:
+```bash
+curl -s "127.0.0.1:8888/search?q=test&format=json" | python3 -c "
+import json,sys; d=json.load(sys.stdin)
+print('결과', len(d.get('results',[])))
+print('실패 엔진', d.get('unresponsive_engines'))"
+```
+- `CAPTCHA` / `too many requests`가 뜨는 엔진은 차단된 상태다. 기본 활성 엔진 중
+  duckduckgo·startpage·brave가 자주 막히며, 현재는 사실상 `google cse` 하나가
+  결과를 낸다(ROADMAP 2-4).
+- 엔진을 늘리려면 `searxng/settings.yml`에서 `naver`·`mojeek`·`qwant` 등을 활성화한다.
+  **켜기 전에 shortcut으로 개별 실측**할 것: `curl -s "127.0.0.1:8888/search?q=!nvr+검색어&format=json"`
+- 개별 URL 실패는 무시되고 나머지로 답한다.
+
+## 답변이 비어서 나온다 (추론만 하고 끝남)
+
+thinking이 켜진 상태에서 추론이 `max_tokens`를 다 써버린 경우다.
+`finish_reason=length`이고 `content`가 빈 문자열이 된다.
+
+- `MAX_TOKENS`를 키우고 재시드(기본 8192), 또는
+- `MLX_THINKING=off`로 서버를 띄운다(기본값). [usage.md](usage.md) 5장 참조.
+
+## 답변이 검색 결과와 어긋난다 / 없는 내용을 지어낸다
+
+- **출처 인용이 붙었는지 먼저 확인한다.** 인용이 없으면 검색 결과에 근거한 답변이
+  아니다. 검색이 실패했는데 모델이 자체 지식으로 답한 경우일 수 있다(미해결 문제,
+  ROADMAP 3장).
+- 모델이 "현재 시점과 맞지 않는 미래 날짜"라며 정상 검색 결과를 의심하면, 답변
+  프롬프트에 현재 날짜가 없어 학습 시점을 현재로 착각하는 것이다(미해결).
+- 다단계 계산이 틀리면 thinking이 꺼져 있기 때문일 수 있다. [usage.md](usage.md) 5장.
 
 ## SSH/터널 실패 (실제로 자주 겪는 순서대로)
 
@@ -69,5 +109,5 @@
 
 ## 포트 점유/충돌
 
-- 수동 실행과 LaunchAgent 동시 사용 금지. `lsof -nP -iTCP:8080,3000 -sTCP:LISTEN`로
+- 수동 실행과 LaunchAgent 동시 사용 금지. `lsof -nP -iTCP:8080,8888,3000 -sTCP:LISTEN`로
   중복 프로세스 확인 후 하나만 남긴다.

@@ -1,0 +1,38 @@
+# SearXNG 로컬 인스턴스 설정 (gemma-server 전용)
+# 기본 설정을 상속하고 필요한 값만 덮어쓴다. 원본: src/searx/settings.yml
+# 반드시 127.0.0.1 에만 바인딩한다. LAN/tailnet/공인 인터넷에 직접 노출하지 않는다.
+use_default_settings: true
+
+general:
+  instance_name: "gemma-server searxng"
+  # 개인용 단일 인스턴스이므로 통계/기여 링크 불필요
+  enable_metrics: false
+
+search:
+  # Open WebUI 의 search_searxng() 는 format=json 으로 질의한다.
+  # 기본값은 html 뿐이라 json 을 켜지 않으면 검색이 동작하지 않는다.
+  formats:
+    - html
+    - json
+  # 한국어 질의가 주 용도지만, 영어 자료도 함께 받도록 all 로 둔다.
+  # (Open WebUI 가 SEARXNG_LANGUAGE 로 매 요청 덮어쓴다)
+  default_lang: "all"
+  autocomplete: ""
+
+server:
+  port: 8888
+  bind_address: "127.0.0.1"
+  # 로컬 단일 사용자이므로 레이트 리미터 불필요. 켜면 Open WebUI 요청이 막힌다.
+  limiter: false
+  public_instance: false
+  image_proxy: false
+  # secret_key 는 run-searxng.sh 가 SEARXNG_SECRET 환경변수로 주입한다.
+
+ui:
+  static_use_hash: true
+
+outgoing:
+  request_timeout: 5.0
+  max_request_timeout: 10.0
+  pool_connections: 10
+  pool_maxsize: 10
