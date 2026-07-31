@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- install-launchagents.sh 가 __REPO__ / __LOGDIR__ 을 실제 경로로 치환해 생성한다. -->
+<!-- SearXNG 는 Open WebUI 의 웹 검색 백엔드다. 기동 순서 의존성은 없다.
+     Open WebUI 는 검색 요청이 실제로 들어올 때만 8888 을 호출하므로,
+     부팅 시점에 셋 중 어느 것이 먼저 떠도 무방하다. -->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>dev.gemma.searxng</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>-lc</string>
+        <string>exec "__REPO__/searxng/run-searxng.sh"</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>__REPO__</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+    <!-- GPU 를 쓰지 않으므로 Background 로 둔다(모델 서버와 자원 경쟁 최소화). -->
+    <key>ProcessType</key>
+    <string>Background</string>
+
+    <key>StandardOutPath</key>
+    <string>__LOGDIR__/searxng.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>__LOGDIR__/searxng.err.log</string>
+</dict>
+</plist>
