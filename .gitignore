@@ -11,6 +11,7 @@ models/
 server/.venv/
 webui/.venv/
 webui/.env
+webui/.env.bak-*
 webui/data/
 
 # MacBook 로컬 접속 설정 (비밀 아님이지만 호스트/사용자 식별정보)
