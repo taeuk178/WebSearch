@@ -386,8 +386,24 @@ Cloudflare Registrar 가 아니므로 네임서버 위임을 **직접** 해야 �
 
 도메인은 **`imprint.asia`(가비아 구매)** 로 확정했다. 공개 호스트명은 `ai.imprint.asia`.
 
-2026-08-02 에 **코드·문서는 모두 준비됐다.** 남은 것은 대시보드·가비아에서
-사람이 해야 하는 일이며, 절차는 `docs/remote-access.md` 에 있다.
+2026-08-02 에 **코드·문서는 모두 준비됐고, Tunnel 생성까지 완료했다.**
+현재 `ai.imprint.asia` DNS 레코드는 만들지 않았으므로 외부 공개 전 상태다.
+남은 작업은 아래 순서를 지킨다.
+
+1. Open WebUI 재시작·가입 차단 실검증
+2. Access Application·사용자 정책 생성
+3. 저장소 표준 `cloudflare/config.yml` 생성 후 Tunnel 수동 기동
+4. DNS 라우팅 후 Access 차단을 즉시 검증
+5. 개인·사내 맥북 실사용 검증 후 `launchd` 상시 실행 등록
+
+**현재 실제 상태(2026-08-02)**:
+- `imprint.asia` zone `Active`, NS는 `aldo.ns.cloudflare.com` / `maya.ns.cloudflare.com`
+- Zero Trust Free 활성화, 팀 도메인은 `ancient-credit-0eb2.cloudflareaccess.com`
+- `~/.cloudflared/cert.pem` 발급 완료
+- `gemma` Tunnel 생성 완료 (`38bf99ec-4993-444a-b4e7-bcee7f4ef31c`)
+- Tunnel 자격증명과 `~/.cloudflared/config.yml` 저장 완료(권한 600), ingress 검증 성공
+- 단, 저장소 실행 스크립트는 `cloudflare/config.yml`을 사용하므로 표준 config 렌더가
+  한 번 더 필요하다. 현재 홈 디렉터리 config만으로 완료로 간주하지 않는다
 
 구현물:
 - `cloudflare/setup-tunnel.sh` — 선행조건 점검 → 설치 → 로그인 → 터널 생성 →
@@ -415,18 +431,19 @@ Cloudflare Registrar 가 아니므로 네임서버 위임을 **직접** 해야 �
 - [x] Cloudflare 계정에 사이트 추가 (Free 플랜, 레코드 스캔 0건 — 예상대로)
 - [x] **가비아 네임서버를 Cloudflare 로 교체 접수** (2026-08-02 20:26) —
       `aldo.ns.cloudflare.com` / `maya.ns.cloudflare.com`
-- [ ] **레지스트리 반영 대기 중.** 가비아는 "설정 완료"를 냈지만 20:30 시점 `.asia`
-      레지스트리는 아직 `ns.gabia.*` 를 게시하고 있다. 확인: `./cloudflare/check-dns.sh`
-- [ ] zone 상태 `Active` 확인
-- [ ] Zero Trust 대시보드 활성화 (무료 플랜, 팀 도메인 지정)
+- [x] 레지스트리 위임 반영 확인 — 공개 리졸버에서 Cloudflare NS 2개 확인 (2026-08-02)
+- [x] zone 상태 `Active` 확인
+- [x] Zero Trust 대시보드 활성화 — Free 플랜,
+      `ancient-credit-0eb2.cloudflareaccess.com`
 
 **C. Access 정책 선구성** — 전부 대시보드 작업. 절차: `docs/remote-access.md` 3장
 
 - [ ] Access Application 생성 (`ai.imprint.asia`, Tunnel DNS 라우팅 전에 완료)
 - [ ] 정책을 **지정 이메일 화이트리스트**로 설정. "인증된 아무나" 금지
-- [ ] MFA 활성화
+- [ ] 브라우저 인증 방식 결정 — 설치 없는 사용은 기본 One-time PIN 사용. 더 강한 MFA가
+      필요하면 MFA가 적용된 Google·Microsoft 등의 IdP 연결
 - [ ] 세션 수명 설정 (회사 기기 고려해 24시간 이하)
-- [ ] CLI·자작 앱용 **서비스 토큰** 발급 + 별도 Allow 정책으로 분리
+- [ ] **선택:** CLI·Hermes·자작 앱을 실제로 쓸 때만 서비스 토큰 발급 + 별도 Allow 정책
 - [x] Open WebUI 자체 로그인 **유지** — `WEBUI_AUTH=True` 확인됨(이중 방어)
 
 **D. Tunnel 구축** — `./cloudflare/setup-tunnel.sh` 가 D 전체를 수행한다
@@ -437,9 +454,14 @@ Cloudflare Registrar 가 아니므로 네임서버 위임을 **직접** 해야 �
       `status.sh`(경고 출력). 하나라도 8080·8888 이면 진행이 막힌다
 - [x] `cloudflared tunnel ingress validate` + catch-all 실매칭 대조를 스크립트에 포함
 - [x] `cloudflared` 설치 (2026-08-02, brew, 2026.7.3)
-- [ ] `cloudflared tunnel login` — **zone 이 Active 여야 목록에 도메인이 뜬다.** B 대기 중
-- [ ] 실제 실행 (B·C 완료 후)
-- [ ] DNS 라우팅 — 스크립트가 확인 프롬프트를 띄운 뒤에만 수행한다
+- [x] `cloudflared tunnel login` 완료 — `~/.cloudflared/cert.pem` 발급
+- [x] `gemma` Tunnel과 자격증명 생성
+      (`38bf99ec-4993-444a-b4e7-bcee7f4ef31c`)
+- [x] 수동 `~/.cloudflared/config.yml` 저장·권한 600·ingress 검증 완료
+- [ ] 저장소 표준 config 생성 — `./cloudflare/setup-tunnel.sh --skip-dns`
+      (기존 `gemma` Tunnel을 재사용하며 `cloudflare/config.yml`을 렌더한다)
+- [ ] `./cloudflare/run-cloudflared.sh` 로 DNS 연결 전 수동 기동 확인
+- [ ] **C의 Access 정책 완료 후** DNS 라우팅 — 스크립트 확인 프롬프트를 거쳐 수행
 - [ ] 수동 기동 후 비인증 요청이 Access에서 차단·리디렉션되는지 확인
       (`check-dns.sh` 3단계가 302 → `*.cloudflareaccess.com` 을 기대한다)
 
@@ -468,6 +490,8 @@ ingress:
 - [x] `scripts/status.sh` 에 터널 점검 추가 (호스트명·ingress 경고·프로세스·
       metrics `/ready`·외부 응답코드)
 - [x] 로그 경로 `~/Library/Logs/gemma/cloudflared.{out,err}.log`
+- [ ] 개인·사내 맥북 검증이 끝난 뒤 `./scripts/install-launchagents.sh --reload` 로 등록
+- [ ] Mac mini 재부팅 후 Tunnel 자동 복구 검증
 
 **F. 문서**
 
@@ -504,20 +528,20 @@ curl https://ai.imprint.asia/api/chat/completions \
 
 ### 7-6. 검증 항목
 
-점검 도구: `./cloudflare/check-dns.sh` (1~4번), `./scripts/status.sh` (7·9번)
+점검 도구: `./cloudflare/check-dns.sh` (1~3번), `./scripts/status.sh` (Tunnel·서비스 상태)
 
-- [ ] `imprint.asia` 의 NS 가 Cloudflare 로 위임됨 (현재는 가비아 NS + 존 데이터 없음)
-- [ ] Cloudflare zone 상태가 `Active`
+- [x] `imprint.asia` 의 NS 가 Cloudflare 로 위임됨
+- [x] Cloudflare zone 상태가 `Active`
 - [ ] `ai.imprint.asia` 가 `<TUNNEL_ID>.cfargotunnel.com` 을 가리킴
 - [ ] 인증 없는 요청이 302 → `*.cloudflareaccess.com` 으로 리디렉션 (200 이면 사고)
 - [ ] 개인 맥북에서 `https://ai.imprint.asia` 접속 → Access 인증 → 대화 성공
 - [ ] **사내 맥북**에서 동일 절차 성공 (방화벽 통과 확인)
 - [ ] 웹 검색 토글 동작 + 출처 인용 표시
 - [ ] Access 인증 없이 접근 시 차단되는지 (시크릿 창 / 다른 계정)
-- [ ] `cloudflared tunnel ingress validate` 성공
-- [ ] `cloudflared tunnel ingress rule https://unmatched.imprint.asia` 이 마지막
+- [x] `cloudflared tunnel ingress validate` 성공 (`~/.cloudflared/config.yml` 기준)
+- [x] `cloudflared tunnel ingress rule https://unmatched.imprint.asia` 이 마지막
       `http_status:404` 규칙과 일치 (catch-all hostname 검증)
 - [ ] 8080·8888 이 외부에서 접근 불가인지
-- [ ] `curl` + 서비스 토큰으로 CLI 응답 성공
+- [ ] **선택:** CLI·Hermes를 사용할 경우 `curl` + 서비스 토큰으로 응답 성공
 - [ ] Mac mini 재부팅 후 터널 자동 복구
 - [ ] 터널 중단 시 접속이 즉시 실패하는지
