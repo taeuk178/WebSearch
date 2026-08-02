@@ -1,0 +1,35 @@
+# cloudflared 설정 — setup-tunnel.sh 가 __PLACEHOLDER__ 를 치환해
+# cloudflare/config.yml 을 생성한다(git 미추적). 직접 편집하지 말 것.
+#
+# 이 파일이 공개 노출 범위를 결정한다. ingress 에 3000 외의 포트를 추가하면
+# 그 순간 인증 없는 모델 API(8080)·검색 엔진(8888)이 인터넷에 열린다.
+
+tunnel: __TUNNEL_ID__
+credentials-file: __CREDENTIALS_FILE__
+
+# QUIC(UDP 7844) 우선, 막히면 http2(TCP 443)로 폴백.
+protocol: __PROTOCOL__
+
+# 터널 자신의 지표/헬스 엔드포인트. 루프백에만 연다. status.sh 가 여기를 읽는다.
+metrics: 127.0.0.1:20241
+
+# 로그는 launchd 가 잡는 stdout 으로 흘린다(~/Library/Logs/gemma/cloudflared.*.log).
+loglevel: info
+
+originRequest:
+  # 로컬 루프백이라 연결은 즉시 되어야 한다. 오래 걸리면 WebUI 가 죽은 것이다.
+  connectTimeout: 30s
+  # Open WebUI 는 SSE 스트리밍 + socket.io(WebSocket)를 쓴다.
+  # cloudflared 는 둘 다 기본 지원하므로 별도 설정이 필요 없다.
+  # 다만 청크 인코딩을 끄면 스트리밍이 버퍼링되므로 절대 disableChunkedEncoding 을 켜지 않는다.
+  disableChunkedEncoding: false
+  # Host 헤더는 원 요청(__HOSTNAME__)이 그대로 전달된다. 덮어쓸 이유가 없다.
+
+ingress:
+  # ── 공개되는 유일한 경로 ──────────────────────────────────────────
+  - hostname: __HOSTNAME__
+    service: __SERVICE_URL__
+
+  # ── 그 외 전부 차단 (catch-all, 필수) ────────────────────────────
+  # 이 규칙이 없으면 cloudflared 가 설정을 거부한다.
+  - service: http_status:404

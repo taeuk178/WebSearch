@@ -87,10 +87,46 @@ AllowUsers taeuk
 - MacBook Tailscale을 끄면 터널을 새로 만들 수 없다.
 - 비밀번호 SSH 로그인이 거부되고, 등록된 키를 가진 사용자만 접속된다.
 
-## 5. 비밀값 취급
+## 5. Cloudflare 경로의 신뢰 경계
+
+사내 기기용으로 `https://ai.imprint.asia` 를 연다. 구축 절차는
+[remote-access.md](remote-access.md), 여기서는 보안 관점만 정리한다.
+
+**신뢰 경계가 달라진다.** SSH 경로는 종단간 암호화라 중간에 평문을 보는 주체가
+없지만, Cloudflare 경로는 **엣지에서 TLS 가 종료된다.** 질문·답변 전체가
+Cloudflare 가 평문으로 볼 수 있는 지점을 지나간다. 민감한 대화는 SSH 경로를 쓴다.
+
+지켜야 할 것:
+
+- **노출 범위**: 터널 ingress 에 `127.0.0.1:3000`(Open WebUI) 외에는 넣지 않는다.
+  8080(모델 API)·8888(SearXNG)은 인증이 없어 넣는 순간 공개된다.
+  `setup-tunnel.sh`·`run-cloudflared.sh`·`status.sh` 세 곳에서 검사하지만,
+  최종 책임은 `cloudflare/config.yml` 을 고치는 사람에게 있다.
+- **Access 정책은 이메일 화이트리스트만.** `Everyone`, `Emails ending in` 금지.
+  "인증된 아무나"는 인증이 아니다.
+- **Open WebUI 로그인을 유지한다**(`WEBUI_AUTH=True`). Access 설정 실수 한 번이
+  곧바로 대화 노출이 되지 않게 하는 이중 방어다.
+- **가입은 잠근다**: `ENABLE_SIGNUP=False`, `DEFAULT_USER_ROLE=pending`.
+  공개 접점이 생기면 이 두 값이 유일한 계정 생성 방어선이다.
+- **실패 모드가 다르다.** SSH 방식은 설정을 틀려도 공개되지 않지만, Cloudflare 는
+  Access 설정 실수가 즉시 공개 노출이다. 공개 호스트명은 CT 로그에 영구히 남는다.
+- 비상 차단: `launchctl unload ~/Library/LaunchAgents/dev.gemma.cloudflared.plist`
+
+점검:
+
+```bash
+./cloudflare/check-dns.sh    # 인증 없는 요청이 302 → cloudflareaccess.com 이어야 한다
+./scripts/status.sh          # ingress 에 8080/8888 이 없는지
+```
+
+## 6. 비밀값 취급
 
 - `webui/.env`(WEBUI_SECRET_KEY), SSH 개인키, Tailscale 인증키, API 키는 **커밋 금지**.
   (`.gitignore`에 `webui/.env`, `scripts/connect-gemma.env` 포함)
+- Cloudflare: `~/.cloudflared/cert.pem`(계정 인증서)과 `~/.cloudflared/<UUID>.json`
+  (터널 자격증명)은 저장소 밖에 있다. `cloudflare/config.yml`·`cloudflare.env` 는
+  `.gitignore` 에 있다. Access 서비스 토큰 Secret 은 발급 시 한 번만 표시되며,
+  파일로 커밋하지 말고 키체인/비밀번호 관리자에 둔다.
 - 대화/추론은 외부 LLM API로 전송되지 않는다. 외부로 나가는 것은 검색어와
   (v1에서는 스니펫만 쓰므로) 검색 엔진 요청뿐이다. 로그로 확인 가능:
   webui 로그에 외부 LLM 호출이 없고 MLX(127.0.0.1)로만 추론 요청이 간다.

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- install-launchagents.sh 가 __REPO__ / __LOGDIR__ 을 실제 경로로 치환해 생성한다. -->
+<!-- Cloudflare Tunnel. Open WebUI(3000) 하나만 외부에 중계한다.
+     기동 순서 의존성은 없다 — WebUI 가 아직이면 엣지가 502 를 내고,
+     WebUI 가 뜨는 즉시 정상화된다. cloudflared 를 죽였다 살릴 필요가 없다.
+     이 에이전트는 cloudflare/config.yml 이 있을 때만 설치된다. -->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>dev.gemma.cloudflared</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>-lc</string>
+        <string>exec "__REPO__/cloudflare/run-cloudflared.sh"</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>__REPO__</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+
+    <!-- 설정 오류로 즉시 죽는 경우(ingress 검증 실패 등) 재시작 폭주를 막는다. -->
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+    <!-- GPU 를 쓰지 않는 네트워크 프로세스. -->
+    <key>ProcessType</key>
+    <string>Background</string>
+
+    <key>StandardOutPath</key>
+    <string>__LOGDIR__/cloudflared.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>__LOGDIR__/cloudflared.err.log</string>
+</dict>
+</plist>

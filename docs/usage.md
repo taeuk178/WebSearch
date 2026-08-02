@@ -1,7 +1,21 @@
 # 사용법 (MacBook에서 접속)
 
-> 전제(최초 1회): MacBook이 Mac mini와 **같은 Google 계정**으로 Tailscale 로그인 +
-> **키(비밀번호 없이) SSH 로그인**이 되는 상태. (설정: [security.md](security.md) 2·3장)
+접속 경로는 두 가지다.
+
+| 경로 | 대상 | 설치 필요 | 문서 |
+|---|---|---|---|
+| **Tailscale + SSH 터널** | 개인 MacBook | Tailscale(VPN 확장 권한) | 이 문서 1·2장 |
+| **Cloudflare (`https://ai.imprint.asia`)** | 사내·개인 공통 | 없음 (브라우저만) | [remote-access.md](remote-access.md) |
+
+개인 기기에서는 SSH 경로를 쓴다. 대화가 Cloudflare 를 지나지 않아 더 안전하다.
+Cloudflare 경로는 Tailscale 설치가 막히는 **사내 기기용**이며, 대화 전체가
+Cloudflare 가 평문으로 볼 수 있는 지점을 지난다([remote-access.md](remote-access.md) 9장).
+
+---
+
+> 아래는 SSH 경로. 전제(최초 1회): MacBook이 Mac mini와 **같은 Google 계정**으로
+> Tailscale 로그인 + **키(비밀번호 없이) SSH 로그인**이 되는 상태.
+> (설정: [security.md](security.md) 2·3장)
 > 확인: `ssh taeuk@taeukkim-macmini` 가 비번 없이 로그인되면 준비 완료.
 
 ## 1. 최초 1회: connect-gemma 설정 (MacBook)

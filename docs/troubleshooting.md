@@ -111,3 +111,59 @@ thinking이 켜진 상태에서 추론이 `max_tokens`를 다 써버린 경우�
 
 - 수동 실행과 LaunchAgent 동시 사용 금지. `lsof -nP -iTCP:8080,8888,3000 -sTCP:LISTEN`로
   중복 프로세스 확인 후 하나만 남긴다.
+
+## Cloudflare 원격 접속 (`ai.imprint.asia`)
+
+먼저 `./cloudflare/check-dns.sh` 를 돌린다. 세 단계 중 어디가 깨졌는지 알려준다.
+로그: `~/Library/Logs/gemma/cloudflared.{out,err}.log`
+
+**도메인이 아예 해석되지 않는다 (SERVFAIL / NXDOMAIN)**
+가비아 네임서버가 아직 Cloudflare 로 바뀌지 않았거나 전파 중이다.
+`check-dns.sh` 의 1번 항목 안내를 따른다. `.asia` 는 최대 48시간 걸릴 수 있다.
+Cloudflare 대시보드에서 zone 상태가 **Active** 인지 확인한다.
+
+**`cloudflared tunnel login` 목록에 도메인이 없다**
+zone 이 아직 Active 가 아니다. 위임 완료를 기다린 뒤 다시 시도한다.
+
+**Error 1033 / 530**
+DNS 는 있는데 터널이 엣지에 붙어 있지 않다. cloudflared 가 안 도는 것이다.
+```bash
+launchctl list | grep cloudflared
+tail -30 ~/Library/Logs/gemma/cloudflared.err.log
+launchctl kickstart -k "gui/$(id -u)/dev.gemma.cloudflared"
+```
+`config.yml` 이 없으면 LaunchAgent 는 아예 등록되지 않는다 —
+`./cloudflare/setup-tunnel.sh` 를 먼저 돌린다.
+
+**502 / 503 / 504**
+터널은 붙었으나 origin(`127.0.0.1:3000`)이 응답하지 않는다. Open WebUI 문제다.
+`./scripts/status.sh` 로 WebUI 헬스를 본다.
+
+**인증 없이 200 이 돌아온다 — 가장 위험한 상태**
+Access 정책이 이 호스트명에 붙지 않았다. 누구나 접근 가능하다는 뜻이다.
+**즉시 터널을 내리고** 원인을 잡는다.
+```bash
+launchctl unload ~/Library/LaunchAgents/dev.gemma.cloudflared.plist
+```
+Zero Trust > Access > Applications 에서 도메인이 `ai.imprint.asia` 로 정확히
+일치하는지, 정책 Action 이 Allow + Emails 화이트리스트인지 확인한다.
+
+**Access 인증은 되는데 계속 로그인 화면으로 돌아온다**
+세션 쿠키 문제다. 시크릿 창으로 재시도하거나
+`https://<팀이름>.cloudflareaccess.com/cdn-cgi/access/logout` 으로 로그아웃 후 재로그인.
+정책의 이메일 목록에 실제 로그인한 주소가 있는지도 확인한다.
+
+**사내망에서만 연결이 안 된다 / 느리다**
+QUIC(UDP 7844)이 막혔을 수 있다. `cloudflare/cloudflare.env` 에서
+`CF_PROTOCOL=http2` 로 바꾸고 `./cloudflare/setup-tunnel.sh --skip-dns` 로
+config 를 다시 만든 뒤 터널을 재시작한다.
+
+**응답 도중 끊긴다 (524)**
+Cloudflare 는 100초 동안 바이트가 전혀 흐르지 않으면 끊는다. 스트리밍 중에는
+토큰이 계속 흘러 정상이지만, 첫 토큰이 100초를 넘기면 걸린다.
+`MLX_THINKING=off`(기본)인지 확인하고, 컨텍스트가 과도하게 길지 않은지 본다.
+
+**CLI 에서 403 이 난다**
+Access 서비스 토큰 헤더(`CF-Access-Client-Id`/`-Secret`)가 빠졌거나, 토큰용
+Allow 정책을 애플리케이션에 추가하지 않은 것이다(remote-access.md 3-4).
+Open WebUI API 키(`Authorization: Bearer`)와는 **둘 다** 필요하다.

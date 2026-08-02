@@ -14,8 +14,20 @@ LOG_DIR="$HOME/Library/Logs/gemma"
 # searxng 는 웹 검색 백엔드. 없으면 검색만 실패하고 대화는 정상 동작한다.
 LABELS=(dev.gemma.model-server dev.gemma.searxng dev.gemma.webui)
 
+# cloudflared(원격 접속 터널)는 설정이 끝난 뒤에만 등록한다.
+# config.yml 없이 로드하면 기동 실패 → KeepAlive 재시작 루프만 돈다.
+if [ -f "$REPO/cloudflare/config.yml" ]; then
+  LABELS+=(dev.gemma.cloudflared)
+else
+  echo "안내: cloudflare/config.yml 이 없어 터널은 등록하지 않는다."
+  echo "      원격 접속이 필요하면 먼저 ./cloudflare/setup-tunnel.sh 를 실행한다."
+fi
+
+# 제거는 등록 여부와 무관하게 전부 훑는다(설정을 지운 뒤에도 정리되도록).
+ALL_LABELS=(dev.gemma.model-server dev.gemma.searxng dev.gemma.webui dev.gemma.cloudflared)
+
 uninstall() {
-  for L in "${LABELS[@]}"; do
+  for L in "${ALL_LABELS[@]}"; do
     launchctl unload "$LA_DIR/$L.plist" 2>/dev/null || true
     rm -f "$LA_DIR/$L.plist"
     echo "제거: $L"
@@ -24,7 +36,7 @@ uninstall() {
 
 case "${1:-}" in
   --uninstall) uninstall; exit 0 ;;
-  --reload)    for L in "${LABELS[@]}"; do launchctl unload "$LA_DIR/$L.plist" 2>/dev/null || true; done ;;
+  --reload)    for L in "${ALL_LABELS[@]}"; do launchctl unload "$LA_DIR/$L.plist" 2>/dev/null || true; done ;;
 esac
 
 mkdir -p "$LA_DIR" "$LOG_DIR"

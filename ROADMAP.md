@@ -12,26 +12,29 @@
 
 | # | 항목 | 상태 | 비고 |
 |---|---|---|---|
-| 0 | **Open WebUI 가입 잠그기** | **미적용** | 현재 누구나 관리자 계정 생성 가능. 원격 노출 전 필수 |
+| 0 | **Open WebUI 가입 잠그기** | **적용됨, 재시작 필요** | 2026-08-02 `.env` 수정. WebUI 재시작 후 시크릿 창 확인 필요 |
 | 1 | SSH 하드닝 적용 | **미적용** | 현재 비밀번호 인증 ON. 보안 모델의 핵심 전제가 깨진 상태 |
-| 2 | **Cloudflare 원격 접속 구축** | 착수 전 | 7장에 상세 계획. 사내 맥북 접속 목적 |
+| 2 | **Cloudflare 원격 접속 구축** | 구현 완료, 미실행 | 코드·문서 준비됨. **가비아 NS 위임**부터 사람이 해야 함 → `docs/remote-access.md` |
 | 3 | 재부팅 자동복구 실기기 검증 | 미검증 | SearXNG LaunchAgent 추가 후 3개 서비스 기준으로 재확인 필요 |
 | 4 | 웹 검색 토글 실사용 검증 | **미검증** | 아래 4장 참조. 모델·검색엔진이 모두 바뀌어 기존 검증이 무효 |
 | 5 | 네트워크 격리 검증 | 미검증 | 핫스팟 접속, 터널 종료 시 차단, 직접 접근 불가 |
 | 6 | 성능 재측정 | 미측정 | 첫 토큰 지연·연속 검색 OOM. 모델 교체로 전제가 바뀜 |
 | 7 | Tailscale ACL 문서화 적용 | 선택 | `docs/security.md`에 예시 기재됨 |
 
-**0번이 가장 급하다.** `webui/.env` 가 아래 상태다.
+**0번은 2026-08-02 에 파일 수정을 마쳤다.** `webui/.env` 가
+`ENABLE_SIGNUP=False`, `DEFAULT_USER_ROLE=pending` 으로 바뀌었다(직전 값은
+`webui/.env.bak-20260802-*` 에 백업). `ENABLE_PERSISTENT_CONFIG=False` 라
+`.env` 가 런타임 설정의 기준이지만, **재시작 전까지는 예전 값으로 돌고 있다.**
 
-```
-ENABLE_SIGNUP=True
-DEFAULT_USER_ROLE=admin
+```bash
+launchctl kickstart -k "gui/$(id -u)/dev.gemma.webui"
 ```
 
-지금은 SSH 터널이 장벽 역할을 해서 실질 위험이 낮지만, 7장의 원격 접속을 열면
-**공개 접점에 닿는 누구나 비밀번호도 초대도 없이 관리자 계정을 만들 수 있다.**
-`docs/install.md` 에도 "관리자 생성 후 False 로 되돌리라"고 적혀 있으나 되돌려지지
-않았다. `ENABLE_SIGNUP=False`, `DEFAULT_USER_ROLE=pending` 으로 고친다.
+재시작 후 시크릿 창에서 `http://127.0.0.1:3000/auth` 의 가입 폼이 사라졌는지
+확인해야 이 항목이 닫힌다. 아울러 `webui.db` 에 관리자 계정이 **2개**
+(`admin@local.dev`, `nous178@naver.com`) 있다. `admin@local.dev` 는 초기 설치
+잔여물로 보이므로 확인 후 제거한다 — 공개 접점이 생기면 쓰지 않는 관리자 계정이
+그대로 공격면이 된다.
 
 1번도 같은 성격이다. 이 서버의 보안 모델 전체가 "Tailscale + SSH 공개키 전용"에
 의존하는데, 지금은 비밀번호로도 로그인된다. `config/sshd_config.d/gemma.conf`가
@@ -355,84 +358,124 @@ VPN·네트워크 확장(Network Extension) 권한을 요구하는데 MDM이 강
 ### 7-3. 비용
 
 Cloudflare Tunnel·Access(Zero Trust) 는 개인 사용 규모에서 **무료**다.
-실제 비용은 도메인뿐이며, Cloudflare Registrar 는 마크업 없이 원가로 판다
-(레지스트리 도매가 + ICANN 수수료 $0.18). 등록가와 갱신가가 같고 첫해 할인이
-없어 장기 비용 예측이 쉽다.
+실제 비용은 도메인뿐이며, Cloudflare Registrar 는 별도 마크업이나 자체 프로모션을
+붙이지 않고 레지스트리 가격과 ICANN 거래 수수료(2026년 기준 $0.20)를 그대로
+반영한다. 다만 레지스트리가 등록·갱신 가격을 다르게 정하거나 가격을 변경할 수
+있으므로 최종 가격은 구매 시 대시보드에서 확인한다.
 
-| TLD | 연 비용(등록=갱신) |
+| TLD | 2026-08 조회 기준 연 비용(참고) |
 |---|---|
-| **.com** | **약 $10.4** |
+| **.com** | **약 $10.5** |
 | .dev | 약 $10.2 |
-| .org | 약 $10.1 (첫해 $7.5) |
+| .org | 등록 약 $7.5 / 갱신 약 $10.1 |
 | .net | 약 $11.9 |
 | .app | 약 $12.2 |
 | .io | 약 $45 |
 
 → **연 1.5만원 안팎**이면 충분하다. `.com` 또는 `.dev` 를 권한다.
 
-주의: 가격은 2026-08 조회 기준이며 레지스트리 정책에 따라 변동한다.
+주의: 위 가격은 참고값이며 레지스트리 정책과 ICANN 수수료에 따라 변동한다.
 그리고 Cloudflare Registrar 는 **Cloudflare 네임서버 사용이 강제**된다.
+
+**실제 결정(2026-08-02)**: 위 권고와 달리 **가비아에서 `imprint.asia`** 를 샀다.
+Cloudflare Registrar 가 아니므로 네임서버 위임을 **직접** 해야 한다 —
+가비아 관리 화면에서 Cloudflare 가 배정한 NS 2개로 교체한다(`docs/remote-access.md` 2장).
+갱신도 가비아에서 관리한다. 기능상 차이는 없고 한 단계가 더 있을 뿐이다.
 
 ### 7-4. 작업 항목
 
+도메인은 **`imprint.asia`(가비아 구매)** 로 확정했다. 공개 호스트명은 `ai.imprint.asia`.
+
+2026-08-02 에 **코드·문서는 모두 준비됐다.** 남은 것은 대시보드·가비아에서
+사람이 해야 하는 일이며, 절차는 `docs/remote-access.md` 에 있다.
+
+구현물:
+- `cloudflare/setup-tunnel.sh` — 선행조건 점검 → 설치 → 로그인 → 터널 생성 →
+  config 렌더 → ingress 검증 → DNS 라우팅 (멱등, `--check` / `--skip-dns`)
+- `cloudflare/check-dns.sh` — NS 위임 · CNAME · Access 게이트 3단계 점검
+- `cloudflare/run-cloudflared.sh` — 기동 전 ingress 재검증 후 실행
+- `cloudflare/config.yml.template`, `cloudflare/cloudflare.env.example`
+- `launchd/dev.gemma.cloudflared.plist.template` + 설치 스크립트·status.sh 연동
+- `docs/remote-access.md`
+
 **A. 선행 조건 (원격 노출 전 반드시)**
 
-- [ ] `webui/.env`: `ENABLE_SIGNUP=False`
-- [ ] `webui/.env`: `DEFAULT_USER_ROLE=pending`
-- [ ] 기존 계정 점검 — 불필요한 관리자 계정 제거 (`webui/data/webui.db` 의 `user` 테이블)
+- [x] `webui/.env`: `ENABLE_SIGNUP=False` (2026-08-02)
+- [x] `webui/.env`: `DEFAULT_USER_ROLE=pending` (2026-08-02)
+- [ ] Open WebUI 재시작 후 시크릿 창에서 가입 UI/API가 실제로 차단됐는지 확인
+      (`ENABLE_PERSISTENT_CONFIG=False` 이므로 `.env` 가 런타임 설정의 기준)
+- [ ] 기존 계정 점검 — `admin@local.dev` 잔여 관리자 제거 (`webui/data/webui.db` `user` 테이블)
 - [ ] SSH 하드닝 적용 (0장 1번)
-- [ ] 세 서비스가 `127.0.0.1` 에만 바인딩됐는지 재확인 (`scripts/status.sh`)
+- [x] 자동 점검 수단 마련 — `setup-tunnel.sh` 1단계가 가입 잠금·루프백 바인딩을
+      검사하고, 실패하면 DNS 라우팅을 스스로 건너뛴다
 
 **B. 도메인·계정 준비**
 
-- [ ] 도메인 결정 및 구매 (Cloudflare Registrar 권장, 연 $10~12)
-- [ ] Cloudflare 계정 생성, 도메인의 네임서버를 Cloudflare 로 위임
-- [ ] Zero Trust 대시보드 활성화 (무료 플랜)
+- [x] 도메인 구매 — `imprint.asia` (가비아)
+- [x] Cloudflare 계정에 사이트 추가 (Free 플랜, 레코드 스캔 0건 — 예상대로)
+- [x] **가비아 네임서버를 Cloudflare 로 교체 접수** (2026-08-02 20:26) —
+      `aldo.ns.cloudflare.com` / `maya.ns.cloudflare.com`
+- [ ] **레지스트리 반영 대기 중.** 가비아는 "설정 완료"를 냈지만 20:30 시점 `.asia`
+      레지스트리는 아직 `ns.gabia.*` 를 게시하고 있다. 확인: `./cloudflare/check-dns.sh`
+- [ ] zone 상태 `Active` 확인
+- [ ] Zero Trust 대시보드 활성화 (무료 플랜, 팀 도메인 지정)
 
-**C. Tunnel 구축**
+**C. Access 정책 선구성** — 전부 대시보드 작업. 절차: `docs/remote-access.md` 3장
 
-- [ ] Mac mini 에 `cloudflared` 설치 (`brew install cloudflared`)
-- [ ] `cloudflared tunnel login` → 인증서 발급
-- [ ] 터널 생성 (`cloudflared tunnel create gemma`)
-- [ ] **ingress 에 3000 만 등록.** 8080(모델 API)·8888(SearXNG) 은 절대 넣지 않는다.
-      하나라도 들어가면 인증 없는 모델 API 가 공개된다
-- [ ] DNS 라우팅 (`cloudflared tunnel route dns gemma ai.<도메인>`)
-- [ ] 수동 기동으로 접속 확인
+- [ ] Access Application 생성 (`ai.imprint.asia`, Tunnel DNS 라우팅 전에 완료)
+- [ ] 정책을 **지정 이메일 화이트리스트**로 설정. "인증된 아무나" 금지
+- [ ] MFA 활성화
+- [ ] 세션 수명 설정 (회사 기기 고려해 24시간 이하)
+- [ ] CLI·자작 앱용 **서비스 토큰** 발급 + 별도 Allow 정책으로 분리
+- [x] Open WebUI 자체 로그인 **유지** — `WEBUI_AUTH=True` 확인됨(이중 방어)
 
-예상 `config.yml` 형태:
+**D. Tunnel 구축** — `./cloudflare/setup-tunnel.sh` 가 D 전체를 수행한다
+
+- [x] 설치·로그인·터널 생성·config 렌더를 스크립트로 자동화
+- [x] **ingress 에 3000 만 등록** — 삼중 방어로 강제.
+      `setup-tunnel.sh`(CF_SERVICE_URL 검사) / `run-cloudflared.sh`(기동 전 config 검사) /
+      `status.sh`(경고 출력). 하나라도 8080·8888 이면 진행이 막힌다
+- [x] `cloudflared tunnel ingress validate` + catch-all 실매칭 대조를 스크립트에 포함
+- [x] `cloudflared` 설치 (2026-08-02, brew, 2026.7.3)
+- [ ] `cloudflared tunnel login` — **zone 이 Active 여야 목록에 도메인이 뜬다.** B 대기 중
+- [ ] 실제 실행 (B·C 완료 후)
+- [ ] DNS 라우팅 — 스크립트가 확인 프롬프트를 띄운 뒤에만 수행한다
+- [ ] 수동 기동 후 비인증 요청이 Access에서 차단·리디렉션되는지 확인
+      (`check-dns.sh` 3단계가 302 → `*.cloudflareaccess.com` 을 기대한다)
+
+> 7-4 초안의 "Tunnel route 의 Protect with Access 활성화" 는 대시보드 Tunnel
+> 화면에서 Public Hostname 을 만들 때의 옵션이다. 여기서는 CLI 로 터널을 만들고
+> Access Application 을 호스트명 기준으로 따로 두므로, C 의 애플리케이션 정책이
+> 그 역할을 한다. 두 방식을 섞지 않는다.
+
+생성되는 `config.yml` 형태(`cloudflare/config.yml.template` 참조):
 ```yaml
 tunnel: <TUNNEL_ID>
 credentials-file: /Users/taeuk/.cloudflared/<TUNNEL_ID>.json
+protocol: auto
+metrics: 127.0.0.1:20241          # status.sh 가 /ready 를 읽는다
 ingress:
-  - hostname: ai.<도메인>
+  - hostname: ai.imprint.asia
     service: http://127.0.0.1:3000
   - service: http_status:404      # 그 외 전부 차단
 ```
 
-**D. Access 정책**
-
-- [ ] Access Application 생성 (도메인: `ai.<도메인>`)
-- [ ] 정책을 **지정 이메일 화이트리스트**로 설정. "인증된 아무나" 금지
-- [ ] MFA 활성화
-- [ ] 세션 수명 설정 (회사 기기 고려해 짧게)
-- [ ] CLI·자작 앱용 **서비스 토큰** 발급 (별도 정책으로 분리)
-- [ ] Open WebUI 자체 로그인 **유지** — Access 만 믿지 않는다(이중 방어)
-
 **E. 상시 운영**
 
-- [ ] `launchd/dev.gemma.cloudflared.plist.template` 작성
-      (SearXNG 용과 동일 구조, `ProcessType: Background`)
-- [ ] `scripts/install-launchagents.sh` 의 `LABELS` 에 추가
-- [ ] `scripts/status.sh` 에 터널 상태 점검 추가
-- [ ] 로그 경로 `~/Library/Logs/gemma/cloudflared.{out,err}.log`
+- [x] `launchd/dev.gemma.cloudflared.plist.template` 작성 (`ProcessType: Background`)
+- [x] `scripts/install-launchagents.sh` — `cloudflare/config.yml` 이 있을 때만 등록.
+      없이 로드하면 KeepAlive 재시작 루프만 돈다. 제거는 항상 전체를 훑는다
+- [x] `scripts/status.sh` 에 터널 점검 추가 (호스트명·ingress 경고·프로세스·
+      metrics `/ready`·외부 응답코드)
+- [x] 로그 경로 `~/Library/Logs/gemma/cloudflared.{out,err}.log`
 
 **F. 문서**
 
-- [ ] `docs/remote-access.md` 신설 — 방안 비교, 결정 근거, 구축 절차
-- [ ] `docs/usage.md` — 사내/개인 맥북 공통 접속 방법 추가
-- [ ] `docs/security.md` — Cloudflare 신뢰 경계와 Access 정책 기재
-- [ ] `docs/troubleshooting.md` — 터널 끊김, Access 인증 실패 대응
-- [ ] `README.md` — 아키텍처 다이어그램에 외부 접속 경로 반영
+- [x] `docs/remote-access.md` 신설 — 순서·가비아 위임·Access 정책·되돌리기·신뢰 경계
+- [x] `docs/usage.md` — 두 접속 경로 비교표 추가
+- [x] `docs/security.md` — 5장에 Cloudflare 신뢰 경계·Access 정책·비상 차단
+- [x] `docs/troubleshooting.md` — 1033/530, 502, 인증 없이 200, 524, QUIC 차단 등
+- [x] `README.md` — 아키텍처 다이어그램에 외부 접속 경로 반영
 
 ### 7-5. CLI·앱에서 쓰기
 
@@ -440,7 +483,7 @@ ingress:
 **포트 3000 하나만 닿으면 동작한다.**
 
 ```bash
-curl https://ai.<도메인>/api/chat/completions \
+curl https://ai.imprint.asia/api/chat/completions \
   -H "CF-Access-Client-Id: <서비스토큰 ID>" \
   -H "CF-Access-Client-Secret: <서비스토큰 Secret>" \
   -H "Authorization: Bearer <Open WebUI API 키>" \
@@ -461,11 +504,19 @@ curl https://ai.<도메인>/api/chat/completions \
 
 ### 7-6. 검증 항목
 
-- [ ] 개인 맥북에서 `https://ai.<도메인>` 접속 → Access 인증 → 대화 성공
+점검 도구: `./cloudflare/check-dns.sh` (1~4번), `./scripts/status.sh` (7·9번)
+
+- [ ] `imprint.asia` 의 NS 가 Cloudflare 로 위임됨 (현재는 가비아 NS + 존 데이터 없음)
+- [ ] Cloudflare zone 상태가 `Active`
+- [ ] `ai.imprint.asia` 가 `<TUNNEL_ID>.cfargotunnel.com` 을 가리킴
+- [ ] 인증 없는 요청이 302 → `*.cloudflareaccess.com` 으로 리디렉션 (200 이면 사고)
+- [ ] 개인 맥북에서 `https://ai.imprint.asia` 접속 → Access 인증 → 대화 성공
 - [ ] **사내 맥북**에서 동일 절차 성공 (방화벽 통과 확인)
 - [ ] 웹 검색 토글 동작 + 출처 인용 표시
 - [ ] Access 인증 없이 접근 시 차단되는지 (시크릿 창 / 다른 계정)
-- [ ] `https://ai.<도메인>` 외 경로가 404 인지 (ingress catch-all 동작)
+- [ ] `cloudflared tunnel ingress validate` 성공
+- [ ] `cloudflared tunnel ingress rule https://unmatched.imprint.asia` 이 마지막
+      `http_status:404` 규칙과 일치 (catch-all hostname 검증)
 - [ ] 8080·8888 이 외부에서 접근 불가인지
 - [ ] `curl` + 서비스 토큰으로 CLI 응답 성공
 - [ ] Mac mini 재부팅 후 터널 자동 복구

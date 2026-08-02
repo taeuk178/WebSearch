@@ -17,6 +17,11 @@ webui/data/
 # MacBook 로컬 접속 설정 (비밀 아님이지만 호스트/사용자 식별정보)
 scripts/connect-gemma.env
 
+# Cloudflare Tunnel (터널 ID·자격증명 경로가 박히므로 커밋 금지)
+cloudflare/config.yml
+cloudflare/cloudflare.env
+cloudflare/*.json
+
 # SearXNG (소스 클론 / venv / 시크릿)
 searxng/src/
 searxng/.venv/

@@ -14,18 +14,27 @@ Open WebUI로 대화·**실시간 웹 검색**·출처 확인을 제공하는 �
 
 ## 아키텍처
 
+접속 경로는 두 가지다. 기본은 SSH 터널이고, 사내 기기용으로 Cloudflare 경로를 둔다.
+
 ```
-[MacBook] --Tailscale/SSH 터널--> [Mac mini]
-  브라우저                          ├─ MLX 모델 서버 (127.0.0.1:8080, OpenAI 호환)
-  127.0.0.1:3001  ── SSH -L ──▶     ├─ SearXNG      (127.0.0.1:8888, 메타서치)
-                                    └─ Open WebUI   (127.0.0.1:3000)
-                                          └─ 검색 스니펫을 프롬프트에 직접 주입
+[개인 MacBook] --Tailscale/SSH 터널--> [Mac mini]
+  브라우저                              ├─ MLX 모델 서버 (127.0.0.1:8080, OpenAI 호환)
+  127.0.0.1:3001  ── SSH -L ──────▶     ├─ SearXNG      (127.0.0.1:8888, 메타서치)
+                                        └─ Open WebUI   (127.0.0.1:3000)
+[사내 MacBook] --HTTPS 443--▶ Cloudflare      ▲     └─ 검색 스니펫을 프롬프트에 직접 주입
+  브라우저                      엣지 + Access ─┘
+                                   │        (cloudflared 터널, 3000 만 중계)
+                            여기서 TLS 종료
 ```
 
 - 세 서비스 모두 **`127.0.0.1`에만 바인딩** (LAN/tailnet/공인 미노출).
-- 원격 접속은 Tailscale 인증 + SSH 공개키. SSH 터널이 열려 있을 때만 사용 가능.
+- SSH 경로: Tailscale 인증 + SSH 공개키. 터널이 열려 있을 때만 사용 가능.
+- Cloudflare 경로: `ai.imprint.asia` 하나만 공개. Cloudflare Access(이메일 화이트리스트)
+  \+ Open WebUI 로그인의 이중 인증. **8080·8888 은 터널에 넣지 않는다.**
 - 검색·대화 내용은 **영구 저장하지 않음**(임시 대화 강제, 스니펫만 메모리 사용).
 - 검색어는 외부 대행 서비스를 거치지 않는다. SearXNG가 로컬에서 각 검색엔진에 직접 질의한다.
+- ⚠️ 다만 Cloudflare 경로를 쓰면 **대화 전체가 Cloudflare 가 평문으로 볼 수 있는
+  지점을 지난다.** 감수한 트레이드오프이며 근거는 [docs/remote-access.md](docs/remote-access.md) 9장.
 
 ## 구성요소 (고정 버전)
 
@@ -58,9 +67,11 @@ unsloth의 UD 양자화는 8bit 레이어 비중이 높아 메모리 대역폭�
 server/   MLX 모델 서버 (run-model-server.sh, venv, lock)
 searxng/  SearXNG 메타서치 (run-searxng.sh, settings.yml, src·venv·.env 는 git 제외)
 webui/    Open WebUI (run-webui.sh, seed-model.sh, .env.example, venv, lock)
+cloudflare/ Cloudflare Tunnel (setup-tunnel.sh, check-dns.sh, run-cloudflared.sh;
+            config.yml·cloudflare.env 는 git 제외)
 launchd/  LaunchAgent plist 템플릿 (자동 실행/재시작)
 scripts/  install-launchagents.sh, status.sh, connect-gemma(MacBook)
-docs/     install / security / usage / troubleshooting / spike-websearch
+docs/     install / security / usage / remote-access / troubleshooting / spike-websearch
 models/   Qwen3.6-35B-A3B-4bit (19GB, git 제외)
 ```
 
@@ -69,7 +80,8 @@ models/   Qwen3.6-35B-A3B-4bit (19GB, git 제외)
 1. 설치: [docs/install.md](docs/install.md)
 2. 보안(Tailscale/SSH): [docs/security.md](docs/security.md)
 3. 사용(MacBook 접속): [docs/usage.md](docs/usage.md)
-4. 문제 해결: [docs/troubleshooting.md](docs/troubleshooting.md)
+4. 원격 접속(Cloudflare, 사내 기기용): [docs/remote-access.md](docs/remote-access.md)
+5. 문제 해결: [docs/troubleshooting.md](docs/troubleshooting.md)
 
 상태 점검: `./scripts/status.sh`
 
