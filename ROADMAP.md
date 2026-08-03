@@ -12,36 +12,60 @@
 
 | # | 항목 | 상태 | 비고 |
 |---|---|---|---|
-| 0 | **Open WebUI 가입 잠그기** | **적용됨, 재시작 필요** | 2026-08-02 `.env` 수정. WebUI 재시작 후 시크릿 창 확인 필요 |
-| 1 | SSH 하드닝 적용 | **미적용** | 현재 비밀번호 인증 ON. 보안 모델의 핵심 전제가 깨진 상태 |
-| 2 | **Cloudflare 원격 접속 구축** | 구현 완료, 미실행 | 코드·문서 준비됨. **가비아 NS 위임**부터 사람이 해야 함 → `docs/remote-access.md` |
-| 3 | 재부팅 자동복구 실기기 검증 | 미검증 | SearXNG LaunchAgent 추가 후 3개 서비스 기준으로 재확인 필요 |
+| 0 | **Open WebUI 가입 잠그기** | **완료 (2026-08-03)** | 재시작 후 API 실측 403, `enable_signup:false` 확인 |
+| 1 | SSH 하드닝 적용 | **미적용 — 의도적 보류** | 비밀번호 인증 ON 실측. Cloudflare 이후로 미룸(근거는 아래) |
+| 2 | **Cloudflare 원격 접속 구축** | **공개됨 — 브라우저 실사용만 남음** | `ai.imprint.asia` 공개·Access 게이트 302 실측 완료(2026-08-03) |
+| 2b | `admin@local.dev` 잔여 관리자 제거 | **완료 (2026-08-03)** | 모델 소유권 이관 후 삭제. 관리자 1명만 남음 |
+| 3 | 재부팅 자동복구 실기기 검증 | 미검증 | 4서비스 LaunchAgent 등록 완료(2026-08-03), 재부팅 검증만 남음 |
 | 4 | 웹 검색 토글 실사용 검증 | **미검증** | 아래 4장 참조. 모델·검색엔진이 모두 바뀌어 기존 검증이 무효 |
 | 5 | 네트워크 격리 검증 | 미검증 | 핫스팟 접속, 터널 종료 시 차단, 직접 접근 불가 |
 | 6 | 성능 재측정 | 미측정 | 첫 토큰 지연·연속 검색 OOM. 모델 교체로 전제가 바뀜 |
 | 7 | Tailscale ACL 문서화 적용 | 선택 | `docs/security.md`에 예시 기재됨 |
 
-**0번은 2026-08-02 에 파일 수정을 마쳤다.** `webui/.env` 가
-`ENABLE_SIGNUP=False`, `DEFAULT_USER_ROLE=pending` 으로 바뀌었다(직전 값은
-`webui/.env.bak-20260802-*` 에 백업). `ENABLE_PERSISTENT_CONFIG=False` 라
-`.env` 가 런타임 설정의 기준이지만, **재시작 전까지는 예전 값으로 돌고 있다.**
+**0번은 2026-08-03 에 닫혔다.** `webui/.env` 가 `ENABLE_SIGNUP=False`,
+`DEFAULT_USER_ROLE=pending` 으로 바뀌었고(직전 값은 `webui/.env.bak-20260802-*`),
+재시작 후 실측으로 확인했다.
 
-```bash
-launchctl kickstart -k "gui/$(id -u)/dev.gemma.webui"
+```
+POST /api/v1/auths/signup  → HTTP 403
+GET  /api/config           → "enable_signup": false, "auth": true
 ```
 
-재시작 후 시크릿 창에서 `http://127.0.0.1:3000/auth` 의 가입 폼이 사라졌는지
-확인해야 이 항목이 닫힌다. 아울러 `webui.db` 에 관리자 계정이 **2개**
-(`admin@local.dev`, `nous178@naver.com`) 있다. `admin@local.dev` 는 초기 설치
-잔여물로 보이므로 확인 후 제거한다 — 공개 접점이 생기면 쓰지 않는 관리자 계정이
-그대로 공격면이 된다.
+`ENABLE_PERSISTENT_CONFIG=False` 라 `.env` 가 런타임 설정의 기준이며, 위 응답이
+그것을 확인해 준다.
 
-1번도 같은 성격이다. 이 서버의 보안 모델 전체가 "Tailscale + SSH 공개키 전용"에
-의존하는데, 지금은 비밀번호로도 로그인된다. `config/sshd_config.d/gemma.conf`가
-준비돼 있고 적용만 남았다. **모든 기기의 키 로그인을 먼저 확인**해야 한다 —
-순서를 틀리면 원격 접속이 막힌다. 절차: `docs/security.md` 3-3.
+**2b — 잔여 관리자도 2026-08-03 에 정리했다.** `admin@local.dev`(초기 설치 잔여물,
+7-26 이후 사용 흔적 없음)를 제거하고 관리자를 `nous178@naver.com` 하나로 줄였다.
 
-0번과 1번 없이 2번을 먼저 하면 **지금보다 덜 안전해진다.**
+제거 시 걸린 것 하나: **시드된 모델 `Qwen3.6 35B` 의 소유자가 그 계정이었다.**
+`model.user_id` 가 삭제된 사용자를 가리키면 관리자 화면에서 소유자 없는 항목이
+되므로, 지우기 전에 소유권을 실사용 관리자로 옮겼다. 다른 테이블에는 참조가
+없었다(38개 테이블 전수 확인). 절차는 WebUI 중지 → 백업 → 트랜잭션 → 재기동이며,
+백업은 `webui/data/webui.db.bak-20260803-204602` 에 있다.
+
+```sql
+UPDATE model SET user_id='<실사용 관리자 id>' WHERE user_id='<잔여 id>';
+DELETE FROM auth WHERE id='<잔여 id>';
+DELETE FROM user WHERE id='<잔여 id>';
+```
+
+재기동 후 `PRAGMA integrity_check` = ok, 가입 API 403 유지, 모델 1개 정상.
+
+**1번(SSH 하드닝)은 2026-08-03 에 Cloudflare 구축 이후로 미루기로 했다.**
+`ssh taeuk@127.0.0.1` 이 `publickey,password,keyboard-interactive` 를 제시하는
+것으로 비밀번호 인증이 열려 있음을 실측했다. `config/sshd_config.d/gemma.conf` 는
+준비돼 있고 적용만 남았다.
+
+미룬 근거 — **Cloudflare 노출은 SSH 공격면을 늘리지 않는다.** 터널 ingress 는
+3000 하나뿐이라 22번은 터널을 타고 들어올 수 없고, 공유기 포트 포워딩도 없다.
+따라서 SSH 는 지금도 LAN·Tailscale 에서만 닿는다. 원래 "0번과 1번 없이 2번을
+먼저 하면 덜 안전해진다" 고 적었는데, 그 위험의 실체는 **0번(가입 개방)** 이었고
+그것은 닫혔다. 1번은 순서상 뒤로 가도 새 위험을 만들지 않는다.
+
+다만 미뤄둔 위험 자체는 남는다. 적용 전 **모든 기기의 키 로그인을 먼저 확인**해야
+한다 — 순서를 틀리면 원격 접속이 막힌다. 현재 `~/.ssh/authorized_keys` 에는
+`m4-air` 키 **1개**뿐이고, 2026-08-03 시점 MacBook Air 는 Tailscale 상
+오프라인이라 실검증을 하지 못했다. 절차: `docs/security.md` 3-3.
 
 ---
 
@@ -53,7 +77,12 @@ launchctl kickstart -k "gui/$(id -u)/dev.gemma.webui"
 - `webui/seed-model.sh` — 표시명 `Qwen3.6 35B`, `function_calling=legacy`, 한국어 기본 시스템 프롬프트
 - 대화 비영속(임시 대화 강제), Arena 모델 숨김
 - LaunchAgent 자동 실행 + KeepAlive 재시작 실증 (`launchd/*.template`, `scripts/install-launchagents.sh`)
-  - ⚠️ 실증 시점은 2서비스 기준. SearXNG 추가분은 미검증(위 0장 2번)
+  - 2026-08-03: **세 서비스 모두 등록·기동 확인.** 직전까지 `~/Library/LaunchAgents`
+    에는 model-server·webui plist 만 있었고(SearXNG plist 미생성) 셋 다 언로드
+    상태였다 — `install-launchagents.sh --reload` 로 3개를 재생성해 해결했다.
+    SearXNG 를 추가한 뒤 설치 스크립트를 다시 돌리지 않은 것이 원인이다.
+  - 2026-08-03: `dev.gemma.cloudflared` 추가 등록으로 **네 서비스** 체제가 됐다(7-4 E).
+  - ⚠️ KeepAlive 재시작·재부팅 복구는 여전히 2서비스 시점 실증이다(0장 3번)
 - `scripts/status.sh` 상태 점검, `server|webui/requirements.lock` 버전 잠금
 - 문서: `docs/install.md`, `docs/security.md`, `docs/usage.md`, `docs/troubleshooting.md`
 
@@ -193,7 +222,7 @@ CAPTCHA에 걸리지 않을지는 켜서 재봐야 한다. SearXNG는 `!nvr 검�
 - [!] ~~대화 1회 = MLX 1회~~ — **검색 시 2회로 변경됨**(2-3). 기준 자체를 수정함
 - [!] 웹 검색 10회 연속 시 모델 서버 OOM 종료 없음 — Qwen이 gemma보다 5GB 더 씀, 재검증
 - [!] 웹 검색 질문 5개 첫 토큰 중앙값 측정·기록 — thinking off로 크게 개선 예상, 재측정
-- [ ] 재부팅 → 1회 물리 로그인 → **세 서비스** 자동 복구 → 새 터널로 재접속
+- [ ] 재부팅 → 1회 물리 로그인 → **네 서비스**(cloudflared 포함) 자동 복구 → 재접속
 - [ ] 다른 네트워크(핫스팟)에서 접속 (집 네트워크 외 검증)
 - [ ] 터널 종료 시 `http://127.0.0.1:<LOCAL_PORT>` 즉시 실패
 - [ ] SSH 터널 없이 LAN/Tailscale/공인으로 3000·8080·8888 직접 접근 불가
@@ -386,24 +415,41 @@ Cloudflare Registrar 가 아니므로 네임서버 위임을 **직접** 해야 �
 
 도메인은 **`imprint.asia`(가비아 구매)** 로 확정했다. 공개 호스트명은 `ai.imprint.asia`.
 
-2026-08-02 에 **코드·문서는 모두 준비됐고, Tunnel 생성까지 완료했다.**
-현재 `ai.imprint.asia` DNS 레코드는 만들지 않았으므로 외부 공개 전 상태다.
-남은 작업은 아래 순서를 지킨다.
+2026-08-03 기준 **`ai.imprint.asia` 는 공개됐고 Access 게이트가 실제로 막고 있다.**
+남은 것은 브라우저 실사용 검증(개인·사내 맥북)뿐이다.
 
-1. Open WebUI 재시작·가입 차단 실검증
-2. Access Application·사용자 정책 생성
-3. 저장소 표준 `cloudflare/config.yml` 생성 후 Tunnel 수동 기동
-4. DNS 라우팅 후 Access 차단을 즉시 검증
-5. 개인·사내 맥북 실사용 검증 후 `launchd` 상시 실행 등록
+1. ~~Open WebUI 재시작·가입 차단 실검증~~ — 완료(2026-08-03)
+2. ~~저장소 표준 `cloudflare/config.yml` 생성 후 Tunnel 수동 기동~~ — 완료(2026-08-03)
+3. ~~Access Application·사용자 정책 생성~~ — 완료(2026-08-03)
+4. ~~DNS 라우팅 후 Access 차단을 즉시 검증~~ — 완료(2026-08-03)
+5. ~~`launchd` 상시 실행 등록~~ — 완료(2026-08-03)
+6. **개인·사내 맥북 브라우저 실사용 검증** ← 지금 여기
 
-**현재 실제 상태(2026-08-02)**:
+**현재 실제 상태(2026-08-03)**:
 - `imprint.asia` zone `Active`, NS는 `aldo.ns.cloudflare.com` / `maya.ns.cloudflare.com`
+  — 공개 리졸버에서 재확인
 - Zero Trust Free 활성화, 팀 도메인은 `ancient-credit-0eb2.cloudflareaccess.com`
 - `~/.cloudflared/cert.pem` 발급 완료
-- `gemma` Tunnel 생성 완료 (`38bf99ec-4993-444a-b4e7-bcee7f4ef31c`)
-- Tunnel 자격증명과 `~/.cloudflared/config.yml` 저장 완료(권한 600), ingress 검증 성공
-- 단, 저장소 실행 스크립트는 `cloudflare/config.yml`을 사용하므로 표준 config 렌더가
-  한 번 더 필요하다. 현재 홈 디렉터리 config만으로 완료로 간주하지 않는다
+- `gemma` Tunnel (`38bf99ec-4993-444a-b4e7-bcee7f4ef31c`), 자격증명 저장 완료
+- **저장소 표준 `cloudflare/config.yml` 렌더 완료**(권한 600), ingress 검증·catch-all 통과
+- **`dev.gemma.cloudflared` LaunchAgent 등록·기동** — 서울 엣지(icn01/icn06)에
+  QUIC 4개 연결, `127.0.0.1:20241/ready` 가 `readyConnections:4` 응답
+- **`ai.imprint.asia` 공개됨** — Cloudflare 프록시 A 레코드(`172.67.183.227` /
+  `104.21.18.234`)로 해석되고, 비인증 요청은 302 로 Access 로그인에 막힌다
+- Access Application 정책: 작업 **Allow**, 포함 = **이메일 `nous178@naver.com`**
+  단건 화이트리스트. MFA 없음(One-time PIN 자체가 메일 소유 증명),
+  세션 수명은 애플리케이션 기본값
+
+> **DNS 라우팅이 공개 스위치였다.** 되돌리려면 Cloudflare DNS 에서 `ai` 레코드를
+> 지운다 — 그 즉시 인터넷에서 진입 경로가 사라진다. 터널 자체는 아웃바운드
+> 연결이라 떠 있어도 레코드 없이는 외부에서 닿지 않는다.
+
+**기록 정정**: 이 절의 직전 판은 `ai.imprint.asia` 를 "아직 NXDOMAIN" 으로 적어
+뒀으나, 2026-08-03 재점검 시 레코드는 이미 존재했다(`setup-tunnel.sh` 가
+DNS 라우팅까지 수행한 것으로 보인다). 즉 그 시점에 이미 공개 상태였고, 실제로
+빠져 있던 것은 **cloudflared 가 떠 있지 않았던 것**이다 — 인증을 통과해도
+1033 이 났을 상태였다. Access 게이트는 그 사이에도 정상 동작했으므로 노출
+사고는 아니었다. 교훈: 공개 여부의 근거는 문서가 아니라 `check-dns.sh` 실측이다.
 
 구현물:
 - `cloudflare/setup-tunnel.sh` — 선행조건 점검 → 설치 → 로그인 → 터널 생성 →
@@ -418,9 +464,10 @@ Cloudflare Registrar 가 아니므로 네임서버 위임을 **직접** 해야 �
 
 - [x] `webui/.env`: `ENABLE_SIGNUP=False` (2026-08-02)
 - [x] `webui/.env`: `DEFAULT_USER_ROLE=pending` (2026-08-02)
-- [ ] Open WebUI 재시작 후 시크릿 창에서 가입 UI/API가 실제로 차단됐는지 확인
-      (`ENABLE_PERSISTENT_CONFIG=False` 이므로 `.env` 가 런타임 설정의 기준)
-- [ ] 기존 계정 점검 — `admin@local.dev` 잔여 관리자 제거 (`webui/data/webui.db` `user` 테이블)
+- [x] Open WebUI 재시작 후 가입 API가 실제로 차단됐는지 확인 (2026-08-03) —
+      `POST /api/v1/auths/signup` → 403, `/api/config` 의 `enable_signup:false`
+- [x] 기존 계정 점검 (2026-08-03) — `admin@local.dev` 제거, 관리자 1명
+      (`nous178@naver.com`). 모델 소유권 이관 선행. 백업 `webui.db.bak-20260803-204602`
 - [ ] SSH 하드닝 적용 (0장 1번)
 - [x] 자동 점검 수단 마련 — `setup-tunnel.sh` 1단계가 가입 잠금·루프백 바인딩을
       검사하고, 실패하면 DNS 라우팅을 스스로 건너뛴다
@@ -438,11 +485,17 @@ Cloudflare Registrar 가 아니므로 네임서버 위임을 **직접** 해야 �
 
 **C. Access 정책 선구성** — 전부 대시보드 작업. 절차: `docs/remote-access.md` 3장
 
-- [ ] Access Application 생성 (`ai.imprint.asia`, Tunnel DNS 라우팅 전에 완료)
-- [ ] 정책을 **지정 이메일 화이트리스트**로 설정. "인증된 아무나" 금지
-- [ ] 브라우저 인증 방식 결정 — 설치 없는 사용은 기본 One-time PIN 사용. 더 강한 MFA가
-      필요하면 MFA가 적용된 Google·Microsoft 등의 IdP 연결
-- [ ] 세션 수명 설정 (회사 기기 고려해 24시간 이하)
+- [x] Access Application 생성 (2026-08-03) — `ai.imprint.asia`
+- [x] 정책을 **지정 이메일 화이트리스트**로 설정 (2026-08-03) — 작업 `Allow`,
+      포함 = 이메일 `nous178@naver.com`. Bypass 아님, 도메인 전체 아님,
+      "인증된 아무나" 아님
+- [x] 브라우저 인증 방식 — One-time PIN(기본). MFA 미적용이나 PIN 수신 자체가
+      메일 소유 증명이므로 요건을 만족한다. 더 강한 보증이 필요해지면 IdP 연결
+- [x] 세션 수명 — "애플리케이션 세션 지속 시간과 동일"(기본 24시간). 값을 바꾼
+      적이 없으므로 24시간 이하 조건 충족
+- [ ] **화이트리스트 확장 검토** — 현재 `nous178@naver.com` 1건뿐이라 사내 맥북에서
+      네이버 메일 로그인이 막히면 PIN 을 못 받는다. 필요 시
+      `dnwndlsdlsi@gmail.com` 추가 (사후 추가 가능, 급하지 않음)
 - [ ] **선택:** CLI·Hermes·자작 앱을 실제로 쓸 때만 서비스 토큰 발급 + 별도 Allow 정책
 - [x] Open WebUI 자체 로그인 **유지** — `WEBUI_AUTH=True` 확인됨(이중 방어)
 
@@ -458,12 +511,16 @@ Cloudflare Registrar 가 아니므로 네임서버 위임을 **직접** 해야 �
 - [x] `gemma` Tunnel과 자격증명 생성
       (`38bf99ec-4993-444a-b4e7-bcee7f4ef31c`)
 - [x] 수동 `~/.cloudflared/config.yml` 저장·권한 600·ingress 검증 완료
-- [ ] 저장소 표준 config 생성 — `./cloudflare/setup-tunnel.sh --skip-dns`
-      (기존 `gemma` Tunnel을 재사용하며 `cloudflare/config.yml`을 렌더한다)
-- [ ] `./cloudflare/run-cloudflared.sh` 로 DNS 연결 전 수동 기동 확인
-- [ ] **C의 Access 정책 완료 후** DNS 라우팅 — 스크립트 확인 프롬프트를 거쳐 수행
-- [ ] 수동 기동 후 비인증 요청이 Access에서 차단·리디렉션되는지 확인
-      (`check-dns.sh` 3단계가 302 → `*.cloudflareaccess.com` 을 기대한다)
+- [x] 저장소 표준 config 생성 (2026-08-03) — `./cloudflare/setup-tunnel.sh --skip-dns`
+      가 기존 `gemma` Tunnel을 재사용해 `cloudflare/config.yml` 을 렌더했다
+- [x] `./cloudflare/run-cloudflared.sh` 로 DNS 연결 전 수동 기동 확인 (2026-08-03) —
+      엣지 QUIC 4연결, metrics `/ready` = `readyConnections:4`
+- [x] DNS 라우팅 (2026-08-03) — `setup-tunnel.sh` 가 이미 수행해 둔 상태였다.
+      `cloudflared tunnel route dns` 를 다시 실행할 필요가 없었다
+- [x] 비인증 요청이 Access에서 차단·리디렉션되는지 확인 (2026-08-03) —
+      `check-dns.sh` 3단계 통과, `/` `/api/models` `/api/v1/models` `/ws/socket.io/`
+      **모두 302 → `ancient-credit-0eb2.cloudflareaccess.com`**.
+      리디렉션 JWT 에 `auth_status: NONE`, `service_token_status: false`
 
 > 7-4 초안의 "Tunnel route 의 Protect with Access 활성화" 는 대시보드 Tunnel
 > 화면에서 Public Hostname 을 만들 때의 옵션이다. 여기서는 CLI 로 터널을 만들고
@@ -490,8 +547,13 @@ ingress:
 - [x] `scripts/status.sh` 에 터널 점검 추가 (호스트명·ingress 경고·프로세스·
       metrics `/ready`·외부 응답코드)
 - [x] 로그 경로 `~/Library/Logs/gemma/cloudflared.{out,err}.log`
-- [ ] 개인·사내 맥북 검증이 끝난 뒤 `./scripts/install-launchagents.sh --reload` 로 등록
+- [x] `dev.gemma.cloudflared` LaunchAgent 등록·기동 (2026-08-03) — 실행 중인
+      모델 서버를 재로딩시키지 않으려고 `--reload` 대신 이 plist 만 개별 생성·로드했다.
+      `RunAtLoad` + `KeepAlive(SuccessfulExit=false)` 라 로그인 시 자동 기동된다
 - [ ] Mac mini 재부팅 후 Tunnel 자동 복구 검증
+- [ ] **잠자기 대책** — KeepAlive 는 프로세스 사망만 복구하고 시스템 슬립은 막지
+      못한다. 맥미니가 잠들면 터널이 끊겨 외부 접속이 죽는다.
+      `sudo pmset -a sleep 0 disablesleep 1` 적용 여부 결정 필요
 
 **F. 문서**
 
@@ -532,15 +594,18 @@ curl https://ai.imprint.asia/api/chat/completions \
 
 - [x] `imprint.asia` 의 NS 가 Cloudflare 로 위임됨
 - [x] Cloudflare zone 상태가 `Active`
-- [ ] `ai.imprint.asia` 가 `<TUNNEL_ID>.cfargotunnel.com` 을 가리킴
-- [ ] 인증 없는 요청이 302 → `*.cloudflareaccess.com` 으로 리디렉션 (200 이면 사고)
+- [x] `ai.imprint.asia` 가 터널을 가리킴 (2026-08-03) — 프록시가 켜져 있어
+      공개 리졸버에는 CNAME 이 아니라 Cloudflare 엣지 A 레코드로 보인다(정상)
+- [x] 인증 없는 요청이 302 → `*.cloudflareaccess.com` 으로 리디렉션 (2026-08-03) —
+      `/`, `/api/models`, `/api/v1/models`, `/ws/socket.io/` 전부 302. 200 없음
 - [ ] 개인 맥북에서 `https://ai.imprint.asia` 접속 → Access 인증 → 대화 성공
 - [ ] **사내 맥북**에서 동일 절차 성공 (방화벽 통과 확인)
 - [ ] 웹 검색 토글 동작 + 출처 인용 표시
 - [ ] Access 인증 없이 접근 시 차단되는지 (시크릿 창 / 다른 계정)
-- [x] `cloudflared tunnel ingress validate` 성공 (`~/.cloudflared/config.yml` 기준)
+- [x] `cloudflared tunnel ingress validate` 성공 (**저장소 `cloudflare/config.yml` 기준**, 2026-08-03)
 - [x] `cloudflared tunnel ingress rule https://unmatched.imprint.asia` 이 마지막
       `http_status:404` 규칙과 일치 (catch-all hostname 검증)
+- [x] 터널이 Cloudflare 엣지에 실제로 등록됨 (2026-08-03, QUIC 4연결)
 - [ ] 8080·8888 이 외부에서 접근 불가인지
 - [ ] **선택:** CLI·Hermes를 사용할 경우 `curl` + 서비스 토큰으로 응답 성공
 - [ ] Mac mini 재부팅 후 터널 자동 복구
